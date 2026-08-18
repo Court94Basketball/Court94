@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Court94</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header class="appHeader">
+        <button
+            id="backButton"
+            class="backButton hidden"
+            type="button"
+        >
+            ← Back
+        </button>
+
+       <div class="appBrand">
+
+    <img
+        src="images/Court94 Banner Logo.png"
+        alt="Court94"
+        class="appLogo"
+    >
+
+    <div class="appTeamBadge">
+        YOUR TEAM
+    </div>
+
+</div>
+    </header>
+
+    <main class="appContainer">
+
+        <!-- HOME SCREEN -->
+<section id="homeScreen" class="screen activeScreen">
+
+    <div class="homeMenu">
+
+        <button class="homeMenuCard" id="teamsBtn" type="button">
+            <span class="homeMenuIcon teamsPeopleIcon">
+    <svg viewBox="0 0 100 75" aria-hidden="true">
+        <!-- Top row: 2 people -->
+        <circle cx="36" cy="17" r="9"></circle>
+        <path d="M20 38c1-10 7-15 16-15s15 5 16 15v4H20z"></path>
+
+        <circle cx="64" cy="17" r="9"></circle>
+        <path d="M48 38c1-10 7-15 16-15s15 5 16 15v4H48z"></path>
+
+        <!-- Bottom row: 3 people -->
+        <circle cx="22" cy="47" r="9"></circle>
+        <path d="M6 70c1-11 7-17 16-17s15 6 16 17v3H6z"></path>
+
+        <circle cx="50" cy="47" r="9"></circle>
+        <path d="M34 70c1-11 7-17 16-17s15 6 16 17v3H34z"></path>
+
+        <circle cx="78" cy="47" r="9"></circle>
+        <path d="M62 70c1-11 7-17 16-17s15 6 16 17v3H62z"></path>
+    </svg>
+</span>
+            <span class="homeMenuText">
+                <strong>Teams</strong>
+                <small>Manage rosters and team setup</small>
+            </span>
+            <span class="homeMenuArrow">›</span>
+        </button>
+
+        <button class="homeMenuCard" id="gamesBtn" type="button">
+            <span class="homeMenuIcon">🏀</span>
+            <span class="homeMenuText">
+                <strong>Games</strong>
+                <small>Start a game or view past games</small>
+            </span>
+            <span class="homeMenuArrow">›</span>
+        </button>
+
+        <button class="homeMenuCard" id="reportsBtn" type="button">
+            <span class="homeMenuIcon reportsChartIcon">
+    <svg viewBox="0 0 80 70" aria-hidden="true">
+        <rect x="8" y="40" width="14" height="24" rx="3"></rect>
+        <rect x="33" y="25" width="14" height="39" rx="3"></rect>
+        <rect x="58" y="8" width="14" height="56" rx="3"></rect>
+        <rect x="5" y="64" width="70" height="5" rx="2"></rect>
+    </svg>
+</span>
+            <span class="homeMenuText">
+                <strong>Reports</strong>
+                <small>Review your team's performance</small>
+            </span>
+            <span class="homeMenuArrow">›</span>
+        </button>
+
+        <button class="homeMenuCard" id="settingsBtn" type="button">
+            <span class="homeMenuIcon">⚙</span>
+            <span class="homeMenuText">
+                <strong>Settings</strong>
+                <small>Manage your Court94 preferences</small>
+            </span>
+            <span class="homeMenuArrow">›</span>
+        </button>
+
+    </div>
+
+</section>
+
+        <!-- TEAMS SCREEN -->
+        <section id="teamsScreen" class="screen">
+
+            <div class="sectionHeading">
+                <div>
+                    <h2>Teams</h2>
+                    <p>Create and manage your Court94 teams.</p>
+                </div>
+
+                <button
+                    id="addTeamButton"
+                    class="primaryButton"
+                    type="button"
+                >
+                    + Add Team
+                </button>
+            </div>
+
+            <div id="teamsList" class="teamsList">
+                <div class="emptyState">
+                    <h3>No teams yet</h3>
+                    <p>
+                        Add your first team to begin building
+                        a roster and choosing statistics.
+                    </p>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- TEAM SETUP SCREEN -->
+        <section id="teamSetupScreen" class="screen">
+
+            <div class="sectionHeading">
+                <div>
+                    <h2 id="teamSetupTitle">Create Team</h2>
+                    <p>
+                        Enter the team information, roster,
+                        and statistics you want to track.
+                    </p>
+                </div>
+            </div>
+
+            <form id="teamForm" class="setupForm">
+
+                <section class="formCard">
+
+                    <h3>Team Information</h3>
+
+                    <label class="formField">
+                        School or Program
+                        <input
+                            id="schoolNameInput"
+                            type="text"
+                            placeholder="Example: Thomas Edison CTE"
+                        >
+                    </label>
+
+                    <label class="formField">
+                        Team Name
+                        <input
+                            id="teamNameInput"
+                            type="text"
+                            placeholder="Example: Varsity Girls"
+                            required
+                        >
+                    </label>
+
+                    <label class="formField">
+                        Season
+                        <input
+                            id="seasonInput"
+                            type="text"
+                            placeholder="Example: 2026–27"
+                        >
+                    </label>
+
+                </section>
+
+                <section class="formCard">
+
+                    <div class="cardHeading">
+                        <h3>Roster</h3>
+
+                        <button
+                            id="addPlayerButton"
+                            class="secondaryButton"
+                            type="button"
+                        >
+                            + Add Player
+                        </button>
+                    </div>
+
+                    <div id="rosterEditor" class="rosterEditor"></div>
+
+                </section>
+
+                <section class="formCard">
+
+                    <h3>Team Statistics</h3>
+
+                    <div id="teamStatChoices" class="statChoiceGrid">
+                    </div>
+
+                </section>
+
+                <section class="formCard">
+
+                    <h3>Player Statistics</h3>
+
+                    <div id="playerStatChoices" class="statChoiceGrid">
+                    </div>
+
+                    <p class="formNote">
+                        Player plus/minus will be added later because
+                        it requires live lineup and substitution tracking.
+                    </p>
+
+                </section>
+
+                <div class="formActions">
+
+                    <button
+                        id="cancelTeamButton"
+                        class="cancelButton"
+                        type="button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        class="saveButton"
+                        type="submit"
+                    >
+                        Save Team
+                    </button>
+
+                </div>
+
+            </form>
+
+        </section>
+
+        <!-- NEW GAME SCREEN -->
+        <section id="newGameScreen" class="screen">
+
+            <div class="sectionHeading">
+                <div>
+                    <h2>New Game</h2>
+                    <p>
+                        Enter the game information before continuing.
+                    </p>
+                </div>
+            </div>
+
+            <form id="newGameForm" class="setupForm">
+
+                <section class="formCard">
+
+                    <h3>Game Information</h3>
+
+                    <label class="formField">
+                        Opponent
+                        <input
+                            id="opponentInput"
+                            type="text"
+                            placeholder="Example: Rice Memorial"
+                            required
+                        >
+                    </label>
+
+                    <label class="formField">
+                        Game Date
+                        <input
+                            id="gameDateInput"
+                            type="date"
+                            required
+                        >
+                    </label>
+
+                </section>
+
+                <section class="formCard">
+
+                    <h3>Game Type</h3>
+
+                    <div class="optionGrid">
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameType"
+                                value="Regular Season"
+                                checked
+                            >
+                            <span>Regular Season</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameType"
+                                value="Tournament"
+                            >
+                            <span>Tournament</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameType"
+                                value="Playoff"
+                            >
+                            <span>Playoff</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameType"
+                                value="Scrimmage"
+                            >
+                            <span>Scrimmage</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameType"
+                                value="Practice"
+                            >
+                            <span>Practice</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+                <section class="formCard">
+
+    <h3>Game Format</h3>
+
+    <div class="optionGrid">
+
+        <label class="optionCard">
+            <input
+                type="radio"
+                name="gameFormat"
+                value="Quarters"
+                checked
+            >
+            <span>Quarters</span>
+        </label>
+
+        <label class="optionCard">
+            <input
+                type="radio"
+                name="gameFormat"
+                value="Halves"
+            >
+            <span>Halves</span>
+        </label>
+
+    </div>
+
+</section>
+                <section class="formCard">
+
+                    <h3>Location</h3>
+
+                    <div class="optionGrid">
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameLocation"
+                                value="Home"
+                                checked
+                            >
+                            <span>Home</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameLocation"
+                                value="Away"
+                            >
+                            <span>Away</span>
+                        </label>
+
+                        <label class="optionCard">
+                            <input
+                                type="radio"
+                                name="gameLocation"
+                                value="Neutral"
+                            >
+                            <span>Neutral</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+                <div class="formActions">
+
+                    <button
+                        id="cancelNewGameButton"
+                        class="cancelButton"
+                        type="button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        class="saveButton"
+                        type="submit"
+                    >
+                        Continue
+                    </button>
+
+                </div>
+
+            </form>
+
+        </section>
+
+
+        <!-- GAME CONFIRMATION SCREEN -->
+        <section id="gameConfirmationScreen" class="screen">
+
+            <div class="confirmationHeader">
+
+                <h2 id="confirmationTeamName">
+                    Team Name
+                </h2>
+
+                <p class="versusText">vs</p>
+
+                <h3 id="confirmationOpponent">
+                    Opponent
+                </h3>
+
+                <p id="confirmationGameDetails"></p>
+
+            </div>
+
+            <section class="formCard">
+
+                <h3>Focus for this Game</h3>
+
+                <div
+                    id="confirmationStats"
+                    class="focusList"
+                ></div>
+
+            </section>
+
+            <div class="formActions">
+
+                <button
+                    id="backToGameSetupButton"
+                    class="cancelButton"
+                    type="button"
+                >
+                    Back
+                </button>
+
+                <button
+                    id="confirmStartGameButton"
+                    class="saveButton"
+                    type="button"
+                >
+                    START GAME
+                </button>
+
+            </div>
+
+        </section>
+
+        <!-- TEAM DETAILS SCREEN -->
+        <section id="teamDetailsScreen" class="screen">
+
+            <div class="sectionHeading">
+                <div>
+                    <h2 id="detailsTeamName">Team Name</h2>
+                    <p id="detailsTeamInformation"></p>
+                </div>
+
+                <button
+                    id="startTeamGameButton"
+                    class="primaryButton"
+                    type="button"
+                >
+                    🏀 Start New Game
+                </button>
+            </div>
+
+            <section class="formCard">
+
+                <div class="cardHeading">
+                    <h3>Roster</h3>
+
+                    <button
+                        id="editDetailsTeamButton"
+                        class="secondaryButton"
+                        type="button"
+                    >
+                        Edit Team
+                    </button>
+                </div>
+
+                <div id="detailsRoster" class="detailsList"></div>
+<section class="formCard">
+
+    <div class="cardHeading">
+        <h3>Past Games</h3>
+    </div>
+
+    <div
+        id="pastGamesList"
+        class="pastGamesList"
+    >
+        <div class="emptyState">
+            <h3>No saved games yet</h3>
+            <p>
+                Completed games will appear here after you save them.
+            </p>
+        </div>
+    </div>
+
+</section>
+            </section>
+
+            <section class="formCard">
+
+                <h3>Selected Team Statistics</h3>
+
+                <div
+                    id="detailsTeamStats"
+                    class="detailsStatGrid"
+                ></div>
+
+            </section>
+
+            <section class="formCard">
+
+                <h3>Selected Player Statistics</h3>
+
+                <div
+                    id="detailsPlayerStats"
+                    class="detailsStatGrid"
+                ></div>
+
+            </section>
+
+        </section>
+        
+                <!-- LIVE GAME SCREEN -->
+        <section id="liveGameScreen" class="screen">
+
+            <div class="liveGameHeader">
+
+                <div>
+                    <img
+    src="images/court94-logo.png"
+    alt="Court94"
+    class="liveGameLogo"
+>
+
+                    <h2 id="liveGameMatchup">
+                        Team vs Opponent
+                    </h2>
+
+                    <p id="liveGameDetails">
+                        Game details
+                    </p>
+                </div>
+
+                <div class="periodControl">
+
+                    <span>Period</span>
+
+                    <select id="livePeriodSelect">
+                        <option value="Q1">Q1</option>
+                        <option value="Q2">Q2</option>
+                        <option value="Q3">Q3</option>
+                        <option value="Q4">Q4</option>
+                        <option value="OT">OT</option>
+                    </select>
+
+                </div>
+
+            </div>
+
+
+            <!-- PLAYER / TEAM TABS -->
+            <div class="trackerTabs">
+
+                <button
+                    id="playersTabButton"
+                    class="trackerTab activeTrackerTab"
+                    type="button"
+                >
+                    PLAYERS
+                </button>
+
+                <button
+                    id="teamTabButton"
+                    class="trackerTab"
+                    type="button"
+                >
+                    TEAM
+                </button>
+
+                <button
+    id="summaryTabButton"
+    class="trackerTab"
+    type="button"
+>
+    SUMMARY
+</button>
+
+            </div>
+
+
+            <!-- PLAYER TRACKER -->
+            <section
+                id="playerTrackerPanel"
+                class="trackerPanel activeTrackerPanel"
+            >
+
+                <h3 class="trackerHeading">
+                    Select Player
+                </h3>
+
+                <div
+                    id="playerBench"
+                    class="playerBench"
+                ></div>
+
+                <div
+                    id="selectedPlayerArea"
+                    class="selectedPlayerArea"
+                    hidden
+                >
+
+                    <div class="selectedPlayerHeader">
+
+                        <div>
+                            <p class="smallLabel">
+                                Selected Player
+                            </p>
+
+                            <h3 id="selectedPlayerName">
+                                Select a player
+                            </h3>
+                        </div>
+
+                    </div>
+
+                    <div
+                        id="playerStatButtons"
+                        class="liveStatGrid"
+                    ></div>
+
+                </div>
+
+            </section>
+
+
+            <!-- TEAM TRACKER -->
+            <section
+                id="teamTrackerPanel"
+                class="trackerPanel"
+            >
+
+                <h3 class="trackerHeading">
+                    Team Statistics
+                </h3>
+
+                <div
+                    id="teamStatButtons"
+                    class="liveStatGrid"
+                ></div>
+
+            </section>
+
+            <!-- LIVE SUMMARY -->
+<section
+    id="summaryTrackerPanel"
+    class="trackerPanel"
+>
+
+    <h3 class="trackerHeading">
+        Game Summary
+    </h3>
+
+    <section class="formCard">
+        <h3>Team Stats</h3>
+
+        <div
+            id="liveSummaryTeamStats"
+            class="liveSummaryTableWrap"
+        ></div>
+    </section>
+
+    <section class="formCard">
+        <h3>Player Stats</h3>
+
+        <div
+            id="liveSummaryPlayerStats"
+            class="liveSummaryTableWrap"
+        ></div>
+    </section>
+
+</section>
+
+
+            <!-- LAST ACTION / UNDO -->
+            <div class="lastActionBar" hidden>
+
+                <div>
+                    <p class="smallLabel">
+                        Last Action
+                    </p>
+
+                    <p id="lastActionText">
+                        No stats recorded yet.
+                    </p>
+                </div>
+
+                <button
+                    id="undoLastActionButton"
+                    class="undoButton"
+                    type="button"
+                    disabled
+                >
+                    UNDO
+                </button>
+
+            </div>
+
+
+            <div class="finishGameArea">
+
+                <button
+                    id="finishGameButton"
+                    class="finishGameButton"
+                    type="button"
+                >
+                    Finish Game
+                </button>
+
+            </div>
+
+        </section>
+                <!-- GAME SUMMARY SCREEN -->
+        <section id="gameSummaryScreen" class="screen">
+
+            <div class="sectionHeading">
+                <div>
+                    <h2>Game Summary</h2>
+                    <p id="summaryMatchup">
+                        Team vs Opponent
+                    </p>
+                </div>
+            </div>
+
+            <section class="formCard">
+
+                <h3>Final Score</h3>
+
+                <div class="scoreEntryGrid">
+
+                    <label class="formField">
+                        Your Team
+                        <input
+                            id="summaryTeamScore"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            readonly
+                        >
+                    </label>
+
+                    <label class="formField">
+                        Opponent
+                        <input
+                            id="summaryOpponentScore"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                        >
+                    </label>
+
+                </div>
+
+            </section>
+
+            <section class="formCard">
+
+                <h3>Team Stats</h3>
+
+                <div
+                    id="summaryTeamStats"
+                    class="detailsStatGrid"
+                ></div>
+
+            </section>
+
+            <section class="formCard">
+
+                <h3>Player Stats</h3>
+
+                <div
+                    id="summaryPlayerStats"
+                    class="summaryPlayerList"
+                ></div>
+
+            </section>
+
+            <div class="formActions">
+
+                <button
+                    id="returnToLiveGameButton"
+                    class="cancelButton"
+                    type="button"
+                >
+                    Back to Game
+                </button>
+
+                <button
+                    id="saveCompletedGameButton"
+                    class="saveButton"
+                    type="button"
+                >
+                    Save Game
+                </button>
+
+            </div>
+
+        </section>
+        <!-- PLACEHOLDER SCREENS -->
+        <section id="gamesScreen" class="screen">
+            <div class="emptyState">
+                <h2>Games</h2>
+                <p>
+                    We’ll build the live Court94 game tracker here next.
+                </p>
+            </div>
+        </section>
+
+        <section id="reportsScreen" class="screen">
+            <div class="emptyState">
+                <h2>Reports</h2>
+                <p>
+                    Saved-game and season reports will appear here.
+                </p>
+            </div>
+        </section>
+
+        <section id="settingsScreen" class="screen">
+            <div class="emptyState">
+                <h2>Settings</h2>
+                <p>
+                    Court94 preferences will appear here.
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
