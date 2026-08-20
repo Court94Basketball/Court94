@@ -278,14 +278,14 @@ function renderRosterEditor(roster) {
         data-player-keep-at-top
         ${player.keepAtTop ? "checked" : ""}
     >
-    <span>Keep at top</span>
+    <span>Starter</span>
 </label>
                     <button
                         class="removePlayerButton"
                         type="button"
                         data-remove-player="${index}"
                     >
-                        Remove
+                        Delete Player
                     </button>
                 </div>
             `;
@@ -2560,6 +2560,35 @@ function deleteTeam(teamId) {
     renderTeams();
 }
 
+function renderGamesTeamFilter() {
+    const gamesTeamFilter =
+        document.getElementById("gamesTeamFilter");
+
+    if (!gamesTeamFilter) {
+        return;
+    }
+
+    gamesTeamFilter.innerHTML = `
+        <option value="all">All Teams</option>
+        ${teams
+            .map((team) => {
+                const teamLabel = [
+                    team.schoolName,
+                    team.teamName
+                ]
+                    .filter(Boolean)
+                    .join(" — ");
+
+                return `
+                    <option value="${team.id}">
+                        ${teamLabel}
+                    </option>
+                `;
+            })
+            .join("")}
+    `;
+}
+
 document
     .getElementById("teamsBtn")
     .addEventListener("click", () => {
@@ -2570,7 +2599,14 @@ document
 document
     .getElementById("gamesBtn")
     .addEventListener("click", () => {
+        renderGamesTeamFilter();
         showScreen("games");
+    });
+
+    document
+    .getElementById("startNewGameButton")
+    .addEventListener("click", () => {
+        showScreen("newGame");
     });
 
 document
@@ -2628,7 +2664,7 @@ document
                         class="removePlayerButton"
                         type="button"
                     >
-                        Remove
+                        Delete Player
                     </button>
                 </div>
             `

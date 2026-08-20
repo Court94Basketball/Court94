@@ -335,7 +335,7 @@ button {
 
 .rosterRow {
     display: grid;
-    grid-template-columns: 90px 1fr auto;
+    grid-template-columns: 90px 1fr 40px 168px;
     gap: 9px;
     align-items: center;
 }
@@ -345,6 +345,27 @@ button {
     border: 2px solid var(--border);
     border-radius: 10px;
     padding: 9px 10px;
+}
+
+.rosterHeader {
+    display: grid;
+    grid-template-columns: 90px 1fr 40px 168px;
+    gap: 9px;
+    align-items: center;
+    margin-bottom: 8px;
+
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--navy-dark);
+}
+
+.rosterHeader span:nth-child(3) {
+    text-align: center;
+    transform: translateX(-12px);
+}
+
+.rosterRow .keepAtTopOption span {
+    display: none;
 }
 
 .removePlayerButton {
@@ -389,6 +410,28 @@ button {
     margin-top: 3px;
     color: var(--muted);
     line-height: 1.35;
+}
+
+.statChoice {
+    transition: 0.15s ease;
+}
+
+.statChoice:has(input:checked) {
+    background: var(--navy);
+    border-color: var(--navy);
+    box-shadow: 0 5px 12px rgba(16, 42, 67, 0.16);
+}
+
+.statChoice:has(input:checked) strong {
+    color: white;
+}
+
+.statChoice:has(input:checked) small {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.statChoice input {
+    accent-color: var(--gold);
 }
 
 .formNote {

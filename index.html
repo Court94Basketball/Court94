@@ -206,6 +206,13 @@
                         </button>
                     </div>
 
+                   <div class="rosterHeader">
+    <span>#</span>
+    <span>Player Name</span>
+    <span>Starter</span>
+    <span></span>
+</div>
+                   
                     <div id="rosterEditor" class="rosterEditor"></div>
 
                 </section>
@@ -858,13 +865,41 @@
         </section>
         <!-- PLACEHOLDER SCREENS -->
         <section id="gamesScreen" class="screen">
+    <div class="sectionHeading">
+        <div>
+            <h2>Games</h2>
+            <p>Start a new game or review past games.</p>
+        </div>
+
+        <button
+            id="startNewGameButton"
+            class="primaryButton"
+            type="button"
+        >
+            + Start New Game
+        </button>
+    </div>
+
+    <section class="formCard">
+        <div class="cardHeading">
+            <h3>Past Games</h3>
+
+            <label class="gamesTeamFilter">
+                Team
+                <select id="gamesTeamFilter">
+                    <option value="all">All Teams</option>
+                </select>
+            </label>
+        </div>
+
+        <div id="gamesList" class="gamesList">
             <div class="emptyState">
-                <h2>Games</h2>
-                <p>
-                    We’ll build the live Court94 game tracker here next.
-                </p>
+                <h3>No games yet</h3>
+                <p>Your completed games will appear here.</p>
             </div>
-        </section>
+        </div>
+    </section>
+</section>
 
         <section id="reportsScreen" class="screen">
             <div class="emptyState">
