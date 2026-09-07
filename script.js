@@ -27,6 +27,16 @@ const teamStats = [
         description: "Record makes and misses; Court94 calculates FG%."
     },
     {
+    key: "threePointers",
+    name: "3PM, 3PA and 3P%",
+    description: "Record makes and misses; Court94 calculates 3P%."
+},
+    {
+    key: "freeThrows",
+    name: "FTM, FTA and FT%",
+    description: "Record makes and misses; Court94 calculates FT%."
+},
+    {
         key: "paintTouches",
         name: "Paint Touches",
         description: "Track offensive possessions that reach the paint."
@@ -38,7 +48,7 @@ const teamStats = [
     },
     {
         key: "opponentOffensiveRebounds",
-        name: "Opponent Offensive Rebounds",
+        name: "Opp. Off Rebs",
         description: "Track second-chance opportunities allowed."
     }
 ];
@@ -95,6 +105,7 @@ let liveGameState = null;
 let selectedLivePlayerId = null;
 let liveActionHistory = [];
 let viewingSavedGame = false;
+let editingLiveGameSetup = false;
 const screens = {
     home: document.getElementById("homeScreen"),
     teams: document.getElementById("teamsScreen"),
@@ -110,6 +121,7 @@ games: document.getElementById("gamesScreen"),
 };
 
 const backButton = document.getElementById("backButton");
+const homeButton = document.getElementById("homeButton");
 const teamsList = document.getElementById("teamsList");
 const rosterEditor = document.getElementById("rosterEditor");
 function loadGames() {
@@ -150,7 +162,34 @@ function saveTeams() {
     );
 }
 
+function saveLiveGameState() {
+    if (!liveGameState) {
+        localStorage.removeItem("court94LiveGameRecovery");
+        return;
+    }
+
+    const recoveryData = {
+        liveGameState,
+        liveActionHistory,
+        selectedLivePlayerId,
+        selectedTeamId,
+        currentGameSetup
+    };
+
+    localStorage.setItem(
+        "court94LiveGameRecovery",
+        JSON.stringify(recoveryData)
+    );
+}
+
+window.addEventListener("pagehide", () => {
+    saveLiveGameState();
+});
+
 function showScreen(screenName) {
+    console.log("SHOW SCREEN:", screenName);
+
+    localStorage.setItem("court94CurrentScreen", screenName);
     Object.values(screens).forEach((screen) => {
         screen.classList.remove("activeScreen");
     });
@@ -158,10 +197,12 @@ function showScreen(screenName) {
     screens[screenName].classList.add("activeScreen");
 
     if (screenName === "home") {
-        backButton.classList.add("hidden");
-    } else {
-        backButton.classList.remove("hidden");
-    }
+    backButton.classList.add("hidden");
+    homeButton.classList.add("hidden");
+} else {
+    backButton.classList.remove("hidden");
+    homeButton.classList.remove("hidden");
+}
 
     window.scrollTo({
         top: 0,
@@ -381,6 +422,73 @@ team.selectedPlayerStats = [
         });
 }
 
+function renderGameStatChoices(
+    team,
+    teamStatSelections = null,
+    playerStatSelections = null
+) {
+    const gameTeamStatChoices =
+        document.getElementById("gameTeamStatChoices");
+
+    const gamePlayerStatChoices =
+        document.getElementById("gamePlayerStatChoices");
+
+    if (!gameTeamStatChoices || !gamePlayerStatChoices || !team) {
+        return;
+    }
+
+    const selectedTeamStats = [
+    ...new Set(
+        teamStatSelections ??
+        team.selectedTeamStats ??
+        []
+    )
+];
+
+const selectedPlayerStats = [
+    ...new Set(
+        playerStatSelections ??
+        team.selectedPlayerStats ??
+        []
+    )
+];
+    gameTeamStatChoices.innerHTML = teamStats
+        .map((stat) => {
+            const isChecked =
+                selectedTeamStats.includes(stat.key);
+
+            return `
+                <label class="gameStatChoice">
+                    <input
+                        type="checkbox"
+                        data-game-team-stat="${stat.key}"
+                        ${isChecked ? "checked" : ""}
+                    >
+                    <span>${stat.name}</span>
+                </label>
+            `;
+        })
+        .join("");
+
+    gamePlayerStatChoices.innerHTML = playerStats
+        .map((stat) => {
+            const isChecked =
+                selectedPlayerStats.includes(stat.key);
+
+            return `
+                <label class="gameStatChoice">
+                    <input
+                        type="checkbox"
+                        data-game-player-stat="${stat.key}"
+                        ${isChecked ? "checked" : ""}
+                    >
+                    <span>${stat.name}</span>
+                </label>
+            `;
+        })
+        .join("");
+}
+
 function collectRoster() {
     return [...document.querySelectorAll(".rosterRow")]
         .map((row) => {
@@ -490,14 +598,172 @@ function saveTeamFromForm(event) {
         (team) => team.id === selectedTeamId
     );
 }
+
+function updateAppTeamBadge() {
+    const badge =
+        document.getElementById("appTeamBadge");
+
+    if (!badge) {
+        return;
+    }
+
+    const team = getSelectedTeam();
+
+    if (!team) {
+        badge.textContent = "YOUR TEAM";
+        return;
+    }
+
+    const teamLabel = [
+        team.schoolName,
+        team.teamName
+    ]
+        .filter(Boolean)
+        .join(" — ");
+
+    badge.textContent =
+        teamLabel || "YOUR TEAM";
+}
+
 function createEmptyStatObject(statKeys) {
     const statObject = {};
 
     statKeys.forEach((statKey) => {
-        statObject[statKey] = 0;
+        if (
+    statKey === "fieldGoals" ||
+    statKey === "threePointers" ||
+    statKey === "freeThrows"
+) {
+            statObject[statKey] = {
+                made: 0,
+                attempted: 0
+            };
+        } else {
+            statObject[statKey] = 0;
+        }
     });
 
     return statObject;
+}
+
+function saveLiveGameSetupChanges() {
+    if (!liveGameState) {
+        return;
+    }
+
+    const team = getSelectedTeam();
+
+    if (!team) {
+        return;
+    }
+
+    const gameStarters = Array.from(
+        document.querySelectorAll(
+            ".gameStarterCheckbox:checked"
+        )
+    ).map((checkbox) => checkbox.dataset.playerId);
+
+    if (gameStarters.length !== 5) {
+        alert("Please select exactly 5 starters.");
+        return;
+    }
+
+    const selectedGameTeamStats = Array.from(
+        document.querySelectorAll(
+            "[data-game-team-stat]:checked"
+        )
+    ).map(
+        (checkbox) => checkbox.dataset.gameTeamStat
+    );
+
+    const selectedGamePlayerStats = Array.from(
+        document.querySelectorAll(
+            "[data-game-player-stat]:checked"
+        )
+    ).map(
+        (checkbox) => checkbox.dataset.gamePlayerStat
+    );
+
+    liveGameState.gameStarters = gameStarters;
+    liveGameState.selectedTeamStats =
+        selectedGameTeamStats;
+    liveGameState.selectedPlayerStats =
+        selectedGamePlayerStats;
+
+    selectedGameTeamStats.forEach((statKey) => {
+        if (
+            liveGameState.teamStats[statKey] ===
+            undefined
+        ) {
+            liveGameState.teamStats[statKey] =
+                createEmptyStatObject([statKey])[statKey];
+        }
+    });
+
+    Object.values(
+        liveGameState.teamStatsByPeriod || {}
+    ).forEach((periodStats) => {
+        selectedGameTeamStats.forEach((statKey) => {
+            if (periodStats[statKey] === undefined) {
+                periodStats[statKey] =
+                    createEmptyStatObject(
+                        [statKey]
+                    )[statKey];
+            }
+        });
+    });
+
+    team.roster.forEach((player) => {
+        if (!liveGameState.playerStatsById[player.id]) {
+            liveGameState.playerStatsById[player.id] = {
+                points: 0
+            };
+        }
+
+        selectedGamePlayerStats.forEach((statKey) => {
+            if (
+                liveGameState.playerStatsById[player.id][
+                    statKey
+                ] === undefined
+            ) {
+                liveGameState.playerStatsById[player.id][
+                    statKey
+                ] = 0;
+            }
+        });
+    });
+
+    Object.values(
+        liveGameState.playerStatsByPeriod || {}
+    ).forEach((periodPlayers) => {
+        team.roster.forEach((player) => {
+            if (!periodPlayers[player.id]) {
+                periodPlayers[player.id] = {
+                    points: 0
+                };
+            }
+
+            selectedGamePlayerStats.forEach(
+                (statKey) => {
+                    if (
+                        periodPlayers[player.id][
+                            statKey
+                        ] === undefined
+                    ) {
+                        periodPlayers[player.id][
+                            statKey
+                        ] = 0;
+                    }
+                }
+            );
+        });
+    });
+
+    editingLiveGameSetup = false;
+
+    renderLiveGame();
+    saveLiveGameState();
+    showScreen("liveGame");
 }
 
 function startLiveGame() {
@@ -507,6 +773,17 @@ function startLiveGame() {
         return;
     }
 
+    const gameStarters = Array.from(
+    document.querySelectorAll(
+        ".gameStarterCheckbox:checked"
+    )
+).map((checkbox) => checkbox.dataset.playerId);
+
+if (gameStarters.length !== 5) {
+    alert("Please select exactly 5 starters.");
+    return;
+}
+
     selectedLivePlayerId =
         team.roster.length > 0
             ? team.roster[0].id
@@ -514,12 +791,28 @@ function startLiveGame() {
 
     liveActionHistory = [];
 
+    const selectedGameTeamStats = Array.from(
+    document.querySelectorAll(
+        "[data-game-team-stat]:checked"
+    )
+).map(
+    (checkbox) => checkbox.dataset.gameTeamStat
+);
+
+const selectedGamePlayerStats = Array.from(
+    document.querySelectorAll(
+        "[data-game-player-stat]:checked"
+    )
+).map(
+    (checkbox) => checkbox.dataset.gamePlayerStat
+);
+
     const playerStatsById = {};
 
     team.roster.forEach((player) => {
         playerStatsById[player.id] =
             createEmptyStatObject(
-                team.selectedPlayerStats
+                selectedGamePlayerStats
             );
 
         playerStatsById[player.id].points = 0;
@@ -528,9 +821,14 @@ function startLiveGame() {
     liveGameState = {
         ...currentGameSetup,
 
+        gameStarters,
+
+        selectedTeamStats: selectedGameTeamStats,
+selectedPlayerStats: selectedGamePlayerStats,
+
         teamStats:
             createEmptyStatObject(
-                team.selectedTeamStats
+                selectedGameTeamStats
             ),
 
         playerStatsById,
@@ -547,7 +845,7 @@ playerStatsByPeriod: {},
     liveGameState.teamStatsByPeriod[
     liveGameState.period
 ] = createEmptyStatObject(
-    team.selectedTeamStats
+    selectedGameTeamStats
 );
 
 liveGameState.playerStatsByPeriod[
@@ -558,7 +856,7 @@ team.roster.forEach((player) => {
     liveGameState.playerStatsByPeriod[
         liveGameState.period
     ][player.id] = createEmptyStatObject(
-        team.selectedPlayerStats
+        selectedGamePlayerStats
     );
 
     liveGameState.playerStatsByPeriod[
@@ -813,8 +1111,48 @@ function getPlayerStatTotal(playerId, statKey) {
     return playerStats[statKey] || 0;
 }
 
+function formatShootingStat(statValue) {
+    if (
+        !statValue ||
+        typeof statValue !== "object"
+    ) {
+        return "0 / 0 · 0%";
+    }
+
+    const made =
+        Number(statValue.made) || 0;
+
+    const attempted =
+        Number(statValue.attempted) || 0;
+
+    const percentage =
+        attempted > 0
+            ? Math.round(
+                (made / attempted) * 100
+            )
+            : 0;
+
+    return `
+    <div class="shootingStatValue">
+        <div>${made} / ${attempted}</div>
+        <div>${percentage}%</div>
+    </div>
+`;
+}
+
 function getTeamStatTotal(statKey) {
-    return liveGameState.teamStats[statKey] || 0;
+    const statValue =
+        liveGameState.teamStats[statKey];
+
+    if (
+    statKey === "fieldGoals" ||
+    statKey === "threePointers" ||
+    statKey === "freeThrows"
+) {
+        return formatShootingStat(statValue);
+    }
+
+    return statValue || 0;
 }
 
 function renderPlayerStatButtons() {
@@ -961,27 +1299,37 @@ function renderTeamStatButtons() {
         document.getElementById("teamStatButtons");
 
     const uniqueTeamStats = [
-        ...new Set(team.selectedTeamStats || [])
-    ];
+    ...new Set(
+        liveGameState.selectedTeamStats ||
+        team.selectedTeamStats ||
+        []
+    )
+];
 
     const regularStats =
-        uniqueTeamStats.filter(
-            (statKey) => statKey !== "transitionPoints"
-        );
+    uniqueTeamStats.filter(
+        (statKey) =>
+            statKey !== "transitionPoints" &&
+            statKey !== "fieldGoals" &&
+            statKey !== "threePointers" &&
+            statKey !== "freeThrows"
+    );
+
+const hasFieldGoals =
+    uniqueTeamStats.includes("fieldGoals");
+
+    const hasThreePointers =
+    uniqueTeamStats.includes("threePointers");
+
+const hasFreeThrows =
+    uniqueTeamStats.includes("freeThrows");
 
     const hasTransition =
         uniqueTeamStats.includes("transitionPoints");
 
     const cardColors = [
-        "teamStatGreen",
-        "teamStatBlue",
-        "teamStatPurple",
-        "teamStatOrange",
-        "teamStatGray",
-        "teamStatRed",
-        "teamStatTeal",
-        "teamStatPink"
-    ];
+    "teamStatBlue"
+];
 
     const regularCards = regularStats
         .map((statKey, index) => {
@@ -1086,10 +1434,187 @@ function renderTeamStatButtons() {
         `
         : "";
 
+        const fieldGoalCard = hasFieldGoals
+    ? (() => {
+        const fieldGoals =
+            liveGameState.teamStats.fieldGoals || {
+                made: 0,
+                attempted: 0
+            };
+
+        const made = fieldGoals.made || 0;
+        const attempted = fieldGoals.attempted || 0;
+
+        const percentage =
+            attempted > 0
+                ? Math.round((made / attempted) * 100)
+                : 0;
+
+        return `
+            <div class="teamStatCard fieldGoalCard">
+                <div class="teamStatCardName">
+                    FGM, FGA AND FG%
+                </div>
+
+                <div class="teamStatCardTotal">
+                    ${made} / ${attempted}
+<br>
+${percentage}%
+                </div>
+
+                <div class="teamStatCardControls">
+                    <button
+                        type="button"
+                        class="teamStatMinusButton"
+                        data-field-goal-result="miss"
+                    >
+                        MISS
+                    </button>
+
+                    <button
+    type="button"
+    class="teamStatUndoButton"
+    data-shooting-undo="fieldGoals"
+>
+    UNDO
+</button>
+
+                    <button
+                        type="button"
+                        class="teamStatPlusButton"
+                        data-field-goal-result="make"
+                    >
+                        MAKE
+                    </button>
+                </div>
+            </div>
+        `;
+    })()
+    : "";
+
+const threePointerCard = hasThreePointers
+    ? (() => {
+        const threePointers =
+            liveGameState.teamStats.threePointers || {
+                made: 0,
+                attempted: 0
+            };
+
+        const made = threePointers.made || 0;
+        const attempted = threePointers.attempted || 0;
+
+        const percentage =
+            attempted > 0
+                ? Math.round((made / attempted) * 100)
+                : 0;
+
+        return `
+            <div class="teamStatCard teamStatBlue threePointerCard">
+                <div class="teamStatCardName">
+                    3PM, 3PA AND 3P%
+                </div>
+
+                <div class="teamStatCardTotal">
+                    ${made} / ${attempted}
+                    <br>
+                    ${percentage}%
+                </div>
+
+                <div class="teamStatCardControls">
+                    <button
+                        type="button"
+                        class="teamStatMinusButton"
+                        data-three-pointer-result="miss"
+                    >
+                        MISS
+                    </button>
+
+                    <button
+                        type="button"
+                        class="teamStatUndoButton"
+                        data-shooting-undo="threePointers"
+                    >
+                        UNDO
+                    </button>
+
+                    <button
+                        type="button"
+                        class="teamStatPlusButton"
+                        data-three-pointer-result="make"
+                    >
+                        MAKE
+                    </button>
+                </div>
+            </div>
+        `;
+    })()
+    : "";
+
+    const freeThrowCard = hasFreeThrows
+    ? (() => {
+        const freeThrows =
+            liveGameState.teamStats.freeThrows || {
+                made: 0,
+                attempted: 0
+            };
+
+        const made = freeThrows.made || 0;
+        const attempted = freeThrows.attempted || 0;
+
+        const percentage =
+            attempted > 0
+                ? Math.round((made / attempted) * 100)
+                : 0;
+
+        return `
+            <div class="teamStatCard freeThrowCard">
+                <div class="teamStatCardName">
+                    FTM, FTA AND FT%
+                </div>
+
+                <div class="teamStatCardTotal">
+                    ${made} / ${attempted}
+<br>
+${percentage}%
+                </div>
+
+                <div class="teamStatCardControls">
+                    <button
+                        type="button"
+                        class="teamStatMinusButton"
+                        data-free-throw-result="miss"
+                    >
+                        MISS
+                    </button>
+
+                    <button
+    type="button"
+    class="teamStatUndoButton"
+    data-shooting-undo="freeThrows"
+>
+    UNDO
+</button>
+
+                    <button
+                        type="button"
+                        class="teamStatPlusButton"
+                        data-free-throw-result="make"
+                    >
+                        MAKE
+                    </button>
+                </div>
+            </div>
+        `;
+    })()
+    : "";
+
     container.innerHTML = `
         <div class="teamStatCardGrid">
-            ${regularCards}
-        </div>
+    ${regularCards}
+${fieldGoalCard}
+${threePointerCard}
+${freeThrowCard}
+</div>
 
         ${transitionCard}
     `;
@@ -1111,6 +1636,49 @@ function renderTeamStatButtons() {
             recordTeamStat(
                 button.dataset.teamStatMinus,
                 -1
+            );
+        });
+    });
+
+    document
+    .querySelectorAll("[data-field-goal-result]")
+    .forEach((button) => {
+        button.addEventListener("click", () => {
+            recordShootingResult(
+                "fieldGoals",
+                button.dataset.fieldGoalResult
+            );
+        });
+    });
+
+    document
+    .querySelectorAll("[data-three-pointer-result]")
+    .forEach((button) => {
+        button.addEventListener("click", () => {
+            recordShootingResult(
+                "threePointers",
+                button.dataset.threePointerResult
+            );
+        });
+    });
+
+    document
+    .querySelectorAll("[data-free-throw-result]")
+    .forEach((button) => {
+        button.addEventListener("click", () => {
+            recordShootingResult(
+                "freeThrows",
+                button.dataset.freeThrowResult
+            );
+        });
+    });
+
+    document
+    .querySelectorAll("[data-shooting-undo]")
+    .forEach((button) => {
+        button.addEventListener("click", () => {
+            undoShootingResult(
+                button.dataset.shootingUndo
             );
         });
     });
@@ -1214,6 +1782,8 @@ periodPlayerState.points =
     renderPlayerBench();
 renderPlayerStatButtons();
 renderLastAction();
+
+saveLiveGameState();
 }
 
 function recordPlayerStat(statKey) {
@@ -1262,6 +1832,150 @@ periodPlayerState[statKey] =
     });
 
     renderPlayerStatButtons();
+renderLastAction();
+
+saveLiveGameState();
+}
+
+function recordShootingResult(statKey, result) {
+    if (!liveGameState) {
+        return;
+    }
+
+    if (
+        !liveGameState.teamStats[statKey] ||
+        typeof liveGameState.teamStats[statKey] !== "object"
+    ) {
+        liveGameState.teamStats[statKey] = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    const shootingStat =
+        liveGameState.teamStats[statKey];
+
+    shootingStat.attempted += 1;
+
+    if (result === "make") {
+        shootingStat.made += 1;
+    }
+
+    const currentPeriod =
+        liveGameState.period;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    if (
+        !liveGameState.teamStatsByPeriod[currentPeriod][statKey] ||
+        typeof liveGameState.teamStatsByPeriod[currentPeriod][statKey] !== "object"
+    ) {
+        liveGameState.teamStatsByPeriod[currentPeriod][statKey] = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    const periodShootingStat =
+        liveGameState.teamStatsByPeriod[
+            currentPeriod
+        ][statKey];
+
+    periodShootingStat.attempted += 1;
+
+    if (result === "make") {
+        periodShootingStat.made += 1;
+    }
+
+    liveActionHistory.push({
+        type: "shootingStat",
+        statKey,
+        result,
+        period: currentPeriod,
+        description:
+            result === "make"
+                ? `${statKey === "fieldGoals" ? "Field Goal" : "Free Throw"} — Make`
+                : `${statKey === "fieldGoals" ? "Field Goal" : "Free Throw"} — Miss`
+    });
+
+    renderTeamStatButtons();
+    renderLastAction();
+
+    saveLiveGameState();
+}
+
+function undoShootingResult(statKey) {
+    if (!liveGameState) {
+        return;
+    }
+
+    let actionIndex = -1;
+
+    for (let i = liveActionHistory.length - 1; i >= 0; i -= 1) {
+        const action = liveActionHistory[i];
+
+        if (
+            action.type === "shootingStat" &&
+            action.statKey === statKey
+        ) {
+            actionIndex = i;
+            break;
+        }
+    }
+
+    if (actionIndex === -1) {
+        return;
+    }
+
+    const action = liveActionHistory[actionIndex];
+
+    const shootingStat =
+        liveGameState.teamStats[statKey];
+
+    if (
+        shootingStat &&
+        typeof shootingStat === "object"
+    ) {
+        shootingStat.attempted = Math.max(
+            0,
+            shootingStat.attempted - 1
+        );
+
+        if (action.result === "make") {
+            shootingStat.made = Math.max(
+                0,
+                shootingStat.made - 1
+            );
+        }
+    }
+
+    const periodShootingStat =
+        liveGameState.teamStatsByPeriod?.[
+            action.period
+        ]?.[statKey];
+
+    if (
+        periodShootingStat &&
+        typeof periodShootingStat === "object"
+    ) {
+        periodShootingStat.attempted = Math.max(
+            0,
+            periodShootingStat.attempted - 1
+        );
+
+        if (action.result === "make") {
+            periodShootingStat.made = Math.max(
+                0,
+                periodShootingStat.made - 1
+            );
+        }
+    }
+
+    liveActionHistory.splice(actionIndex, 1);
+
+    renderTeamStatButtons();
     renderLastAction();
 }
 
@@ -1315,7 +2029,9 @@ liveGameState.teamStatsByPeriod[
     });
 
     renderTeamStatButtons();
-    renderLastAction();
+renderLastAction();
+
+saveLiveGameState();
 }
 
 function recordTransitionPoints(points) {
@@ -1359,7 +2075,9 @@ liveGameState.teamStatsByPeriod[
     });
 
     renderTeamStatButtons();
-    renderLastAction();
+renderLastAction();
+
+saveLiveGameState();
 }
 
 function renderLiveSummary() {
@@ -1382,9 +2100,23 @@ function renderLiveSummary() {
         ? ["1st Half", "2nd Half", "OT"]
         : ["Q1", "Q2", "Q3", "Q4", "OT"];
 
+        const orderedTeamStats = [
+    ...uniqueTeamStats.filter(
+        (statKey) =>
+            statKey !== "fieldGoals" &&
+            statKey !== "threePointers" &&
+            statKey !== "freeThrows"
+    ),
+    ...uniqueTeamStats.filter(
+        (statKey) =>
+            statKey === "fieldGoals" ||
+            statKey === "threePointers" ||
+            statKey === "freeThrows"
+    )
+];
     const teamRows =
-        uniqueTeamStats
-            .map((statKey) => {
+        orderedTeamStats
+    .map((statKey) => {
                 const stat = teamStats.find(
                     (item) => item.key === statKey
                 );
@@ -1405,10 +2137,16 @@ function renderLiveSummary() {
             liveGameState.teamStatsByPeriod?.[
                 period
             ]?.[statKey] || 0;
+            const displayPeriodValue =
+    statKey === "fieldGoals" ||
+    statKey === "threePointers" ||
+    statKey === "freeThrows"
+        ? formatShootingStat(periodValue)
+        : periodValue;
 
         return `
             <td>
-                ${periodValue}
+                ${displayPeriodValue}
             </td>
         `;
     })
@@ -1511,26 +2249,152 @@ function renderLiveSummary() {
             })
             .join("");
 
-    document.getElementById(
-        "liveSummaryPlayerStats"
-    ).innerHTML = `
-        <div class="boxScoreWrap">
-            <table class="boxScoreTable">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Player</th>
-                        ${playerHeaderCells}
-                    </tr>
-                </thead>
+            const playerScoringTotals = periodColumns.map((period) => {
+    return team.roster.reduce((total, player) => {
+        const playerPeriodStats =
+            liveGameState.playerStatsByPeriod?.[
+                period
+            ]?.[player.id];
 
-                <tbody>
-                    ${playerRows}
-                </tbody>
-            </table>
-        </div>
-    `;
+        return total + (playerPeriodStats?.points || 0);
+    }, 0);
+});
+
+const playerGameTotal =
+    team.roster.reduce((total, player) => {
+        return total + getPlayerStatTotal(
+            player.id,
+            "points"
+        );
+    }, 0);
+
+          const playerScoringRows =
+    team.roster
+        .map((player) => {
+            const periodCells =
+                periodColumns
+                    .map((period) => {
+                        const playerPeriodStats =
+                            liveGameState.playerStatsByPeriod?.[
+                                period
+                            ]?.[player.id];
+
+                        const points =
+                            playerPeriodStats?.points || 0;
+
+                        return `
+                            <td>
+                                ${points}
+                            </td>
+                        `;
+                    })
+                    .join("");
+
+            return `
+                <tr>
+                    <td class="playerNameCell">
+                        ${player.name || "Unnamed"}
+                    </td>
+
+                    ${periodCells}
+
+                    <td>
+                        ${getPlayerStatTotal(
+                            player.id,
+                            "points"
+                        )}
+                    </td>
+                </tr>
+            `;
+        })
+        .join("");
+
+        const playerStatTotals = playerStatColumns.map((statKey) => {
+    return team.roster.reduce((total, player) => {
+        return total + getPlayerStatTotal(
+            player.id,
+            statKey
+        );
+    }, 0);
+});
+
+          
+    document.getElementById(
+    "liveSummaryPlayerStats"
+).innerHTML = `
+    <div class="boxScoreWrap">
+        <h3>Player Scoring</h3>
+
+        <table class="boxScoreTable">
+            <thead>
+                <tr>
+                    <th>Player</th>
+
+                    ${periodColumns
+                        .map((period) => {
+                            return `
+                                <th>${period}</th>
+                            `;
+                        })
+                        .join("")}
+
+                    <th>Total</th>
+                </tr>
+            </thead>
+
+       <tbody>
+    ${playerScoringRows}
+
+    <tr class="summaryTotalsRow">
+        <td>Totals</td>
+
+        ${playerScoringTotals
+            .map((total) => {
+                return `
+                    <td>${total}</td>
+                `;
+            })
+            .join("")}
+
+        <td>${playerGameTotal}</td>
+    </tr>
+</tbody>
+        </table>
+    </div>
+
+    <div class="boxScoreWrap">
+        <h3>Player Stats</h3>
+
+        <table class="boxScoreTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    ${playerHeaderCells}
+                </tr>
+            </thead>
+
+            <tbody>
+    ${playerRows}
+
+    <tr class="summaryTotalsRow">
+        <td></td>
+        <td>Totals</td>
+
+        ${playerStatTotals
+            .map((total) => {
+                return `
+                    <td>${total}</td>
+                `;
+            })
+            .join("")}
+    </tr>
+</tbody>
+        </table>
+    </div>
+`;
 }
+
 function openGameSummary() {
     const team = getSelectedTeam();
 
@@ -1653,6 +2517,15 @@ const playerRows =
         })
         .join("");
 
+             const playerStatTotals = playerStatColumns.map((statKey) => {
+    return team.roster.reduce((total, player) => {
+        return total + getPlayerStatTotal(
+            player.id,
+            statKey
+        );
+    }, 0);
+});
+
 document.getElementById(
     "summaryPlayerStats"
 ).innerHTML = `
@@ -1667,8 +2540,21 @@ document.getElementById(
             </thead>
 
             <tbody>
-                ${playerRows}
-            </tbody>
+    ${playerRows}
+
+    <tr class="summaryTotalsRow">
+        <td></td>
+        <td>Totals</td>
+
+        ${playerStatTotals
+            .map((total) => {
+                return `
+                    <td>${total}</td>
+                `;
+            })
+            .join("")}
+    </tr>
+</tbody>
         </table>
     </div>
 `;
@@ -1682,6 +2568,11 @@ document.getElementById(
 document.getElementById(
     "summaryTeamScore"
 ).value = calculatedTeamScore;
+
+document.getElementById(
+    "summaryOpponentScore"
+).value = 0;
+
     showScreen("gameSummary");
 }
 
@@ -1717,8 +2608,23 @@ function openSavedGameSummary(gameId) {
     game.gameFormat === "Halves"
         ? ["1st Half", "2nd Half", "OT"]
         : ["Q1", "Q2", "Q3", "Q4", "OT"];
-    const teamStatRows =
-    uniqueTeamStats
+    const orderedTeamStats = [
+    ...uniqueTeamStats.filter(
+        (statKey) =>
+            statKey !== "fieldGoals" &&
+            statKey !== "threePointers" &&
+            statKey !== "freeThrows"
+    ),
+    ...uniqueTeamStats.filter(
+        (statKey) =>
+            statKey === "fieldGoals" ||
+            statKey === "threePointers" ||
+            statKey === "freeThrows"
+    )
+];
+
+const teamStatRows =
+    orderedTeamStats
         .map((statKey) => {
             const stat = teamStats.find(
                 (item) => item.key === statKey
@@ -1737,20 +2643,49 @@ function openSavedGameSummary(gameId) {
                     ${periodColumns
     .map((period) => {
         const periodValue =
-            game.teamStatsByPeriod?.[
-                period
-            ]?.[statKey] || 0;
+    game.teamStatsByPeriod?.[
+        period
+    ]?.[statKey] || 0;
 
-        return `
-            <td>
-                ${periodValue}
-            </td>
-        `;
+const displayPeriodValue =
+    statKey === "fieldGoals" ||
+    statKey === "freeThrows"
+        ? `${periodValue?.made || 0} / ${periodValue?.attempted || 0} - ${
+            (periodValue?.attempted || 0) > 0
+                ? Math.round(
+                    ((periodValue?.made || 0) /
+                        periodValue.attempted) *
+                        100
+                )
+                : 0
+          }%`
+        : periodValue;
+
+return `
+    <td>
+        ${displayPeriodValue}
+    </td>
+`;
     })
     .join("")}
 
 <td>
-    ${game.teamStats?.[statKey] || 0}
+    ${
+        statKey === "fieldGoals" ||
+        statKey === "freeThrows"
+            ? `${game.teamStats?.[statKey]?.made || 0} / ${
+                game.teamStats?.[statKey]?.attempted || 0
+              } - ${
+                (game.teamStats?.[statKey]?.attempted || 0) > 0
+                    ? Math.round(
+                        ((game.teamStats?.[statKey]?.made || 0) /
+                            game.teamStats[statKey].attempted) *
+                            100
+                      )
+                    : 0
+              }%`
+            : game.teamStats?.[statKey] || 0
+    }
 </td>
                 </tr>
             `;
@@ -1791,53 +2726,213 @@ document.getElementById(
         ...new Set(team.selectedPlayerStats || [])
     ];
 
-    document.getElementById("summaryPlayerStats").innerHTML =
+   const savedPlayerStatColumns = [
+    "points",
+    ...uniquePlayerStats.filter(
+        (statKey) => statKey !== "points"
+    )
+];
+
+const savedPlayerHeaderCells =
+    savedPlayerStatColumns
+        .map((statKey) => {
+            const stat = playerStats.find(
+                (item) => item.key === statKey
+            );
+
+            return `
+                <th>
+                    ${
+                        statKey === "points"
+                            ? "PTS"
+                            : stat?.name || statKey
+                    }
+                </th>
+            `;
+        })
+        .join("");
+
+const savedPlayerScoringRows =
     team.roster
         .map((player) => {
-            const playerStatsLine =
-                uniquePlayerStats
-                    .map((statKey) => {
-                        const stat = playerStats.find(
-                            (item) =>
-                                item.key === statKey
-                        );
-
-                        if (!stat) {
-                            return "";
-                        }
-
-                        const total =
-    game.playerStatsById?.[
-        player.id
-    ]?.[statKey] || 0;
+            const periodCells =
+                periodColumns
+                    .map((period) => {
+                        const points =
+                            game.playerStatsByPeriod?.[
+                                period
+                            ]?.[player.id]?.points || 0;
 
                         return `
-                            <div class="compactPlayerStat">
-                                <span>${stat.name}</span>
-                                <strong>${total}</strong>
-                            </div>
+                            <td>${points}</td>
                         `;
                     })
                     .join("");
 
             return `
-                <div class="compactPlayerSummary">
+                <tr>
+                    <td class="playerNameCell">
+                        ${player.name || "Unnamed"}
+                    </td>
 
-                    <div class="compactPlayerHeader">
-                        <strong>
-                            #${player.number || "—"}
-                            ${player.name || "Unnamed"}
-                        </strong>
-                    </div>
+                    ${periodCells}
 
-                    <div class="compactPlayerStats">
-                        ${playerStatsLine}
-                    </div>
-
-                </div>
+                    <td>
+                        ${
+                            game.playerStatsById?.[
+                                player.id
+                            ]?.points || 0
+                        }
+                    </td>
+                </tr>
             `;
         })
         .join("");
+
+const savedScoringTotals =
+    periodColumns.map((period) => {
+        return team.roster.reduce(
+            (total, player) => {
+                return total + (
+                    game.playerStatsByPeriod?.[
+                        period
+                    ]?.[player.id]?.points || 0
+                );
+            },
+            0
+        );
+    });
+
+const savedGamePointsTotal =
+    team.roster.reduce((total, player) => {
+        return total + (
+            game.playerStatsById?.[
+                player.id
+            ]?.points || 0
+        );
+    }, 0);
+
+const savedPlayerRows =
+    team.roster
+        .map((player) => {
+            const statCells =
+                savedPlayerStatColumns
+                    .map((statKey) => {
+                        const total =
+                            game.playerStatsById?.[
+                                player.id
+                            ]?.[statKey] || 0;
+
+                        return `
+                            <td>${total}</td>
+                        `;
+                    })
+                    .join("");
+
+            return `
+                <tr>
+                    <td>
+                        ${player.number || "—"}
+                    </td>
+
+                    <td class="playerNameCell">
+                        ${player.name || "Unnamed"}
+                    </td>
+
+                    ${statCells}
+                </tr>
+            `;
+        })
+        .join("");
+
+const savedPlayerStatTotals =
+    savedPlayerStatColumns.map((statKey) => {
+        return team.roster.reduce(
+            (total, player) => {
+                return total + (
+                    game.playerStatsById?.[
+                        player.id
+                    ]?.[statKey] || 0
+                );
+            },
+            0
+        );
+    });
+
+document.getElementById(
+    "summaryPlayerStats"
+).innerHTML = `
+    <div class="boxScoreWrap">
+        <h3>Player Scoring</h3>
+
+        <table class="boxScoreTable">
+            <thead>
+                <tr>
+                    <th>Player</th>
+
+                    ${periodColumns
+                        .map((period) => {
+                            return `
+                                <th>${period}</th>
+                            `;
+                        })
+                        .join("")}
+
+                    <th>Total</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                ${savedPlayerScoringRows}
+
+                <tr class="summaryTotalsRow">
+                    <td>Totals</td>
+
+                    ${savedScoringTotals
+                        .map((total) => {
+                            return `
+                                <td>${total}</td>
+                            `;
+                        })
+                        .join("")}
+
+                    <td>${savedGamePointsTotal}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="boxScoreWrap">
+        <h3>Player Stats</h3>
+
+        <table class="boxScoreTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    ${savedPlayerHeaderCells}
+                </tr>
+            </thead>
+
+            <tbody>
+                ${savedPlayerRows}
+
+                <tr class="summaryTotalsRow">
+                    <td></td>
+                    <td>Totals</td>
+
+                    ${savedPlayerStatTotals
+                        .map((total) => {
+                            return `
+                                <td>${total}</td>
+                            `;
+                        })
+                        .join("")}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+`;
 document.getElementById(
     "returnToLiveGameButton"
 ).textContent = "Back to Team";
@@ -1869,13 +2964,15 @@ function saveCompletedGame() {
         ) || 0;
 
     const completedGame = {
-        id: crypto.randomUUID(),
-        teamId: team.id,
-        opponent: liveGameState.opponent,
+    id: crypto.randomUUID(),
+    teamId: team.id,
+    season: team.season,
+    opponent: liveGameState.opponent,
         gameDate: liveGameState.gameDate,
         gameType: liveGameState.gameType,
         location: liveGameState.location,
         gameFormat: liveGameState.gameFormat,
+        gameStarters: liveGameState.gameStarters,
         teamScore,
         opponentScore,
         teamStats: liveGameState.teamStats,
@@ -2014,6 +3111,8 @@ if (periodPlayerState) {
         renderPlayerBench();
         connectPlayerCardButtons();
         renderLastAction();
+
+        saveLiveGameState();
 
         return;
     }
@@ -2262,18 +3361,69 @@ const combinedStats = [
 ]
     .filter(Boolean);
 
-    document.getElementById(
-        "confirmationStats"
-    ).innerHTML = combinedStats
-        .map((stat) => {
-            return `
-                <div class="focusItem">
-                    <span class="focusCheck">✓</span>
-                    <span>${stat.name}</span>
-                </div>
-            `;
-        })
-        .join("");
+        const gameStartersList =
+    document.getElementById("gameStartersList");
+
+gameStartersList.innerHTML = team.roster
+    .map((player) => {
+        return `
+            <label class="gameStarterOption">
+                <input
+                    type="checkbox"
+                    class="gameStarterCheckbox"
+                    data-player-id="${player.id}"
+                    ${
+    editingLiveGameSetup
+        ? (liveGameState.gameStarters || []).includes(player.id)
+            ? "checked"
+            : ""
+        : player.keepAtTop
+            ? "checked"
+            : ""
+}
+                >
+                <span>
+                    #${player.number} ${player.name}
+                </span>
+            </label>
+        `;
+    })
+    .join("");
+
+    const starterCheckboxes =
+    document.querySelectorAll(".gameStarterCheckbox");
+
+function updateStarterCheckboxes() {
+    const checkedCount =
+        document.querySelectorAll(
+            ".gameStarterCheckbox:checked"
+        ).length;
+
+    starterCheckboxes.forEach((checkbox) => {
+        checkbox.disabled =
+            checkedCount >= 5 && !checkbox.checked;
+    });
+}
+
+starterCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+        updateStarterCheckboxes();
+    });
+});
+
+updateStarterCheckboxes();
+
+editingLiveGameSetup = false;
+
+document.getElementById(
+    "backToGameSetupButton"
+).style.display = "";
+
+document.getElementById(
+    "confirmStartGameButton"
+).textContent = "START GAME";
+
+    renderGameStatChoices(team);
 
     showScreen("gameConfirmation");
 }
@@ -2287,6 +3437,7 @@ function openTeamDetails(teamId) {
     }
 
     selectedTeamId = teamId;
+    updateAppTeamBadge();
 
     const fullName = [
         team.schoolName,
@@ -2459,8 +3610,9 @@ function renderTeams() {
         return;
     }
 
-    teamsList.innerHTML = teams
-        .map((team) => {
+    teamsList.innerHTML = [...teams]
+    .reverse()
+    .map((team) => {
             const fullName = [
                 team.schoolName,
                 team.teamName
@@ -2561,32 +3713,261 @@ function deleteTeam(teamId) {
 }
 
 function renderGamesTeamFilter() {
-    const gamesTeamFilter =
-        document.getElementById("gamesTeamFilter");
+    const gamesTeamCards =
+        document.getElementById("gamesTeamCards");
 
-    if (!gamesTeamFilter) {
+    if (!gamesTeamCards) {
         return;
     }
 
-    gamesTeamFilter.innerHTML = `
-        <option value="all">All Teams</option>
-        ${teams
-            .map((team) => {
+    if (teams.length === 0) {
+        gamesTeamCards.innerHTML = `
+            <div class="emptyState">
+                <h3>No teams yet</h3>
+                <p>Create a team to start tracking games.</p>
+            </div>
+        `;
+
+        gamesTeamCards.dataset.selectedTeamId = "";
+        return;
+    }
+
+    let selectedGamesTeamId =
+        gamesTeamCards.dataset.selectedTeamId;
+
+    const selectedTeamStillExists =
+        teams.some(
+            (team) =>
+                team.id === selectedGamesTeamId
+        );
+
+    if (!selectedTeamStillExists) {
+        selectedGamesTeamId =
+            teams.some(
+                (team) =>
+                    team.id === selectedTeamId
+            )
+                ? selectedTeamId
+                : teams[0].id;
+
+        gamesTeamCards.dataset.selectedTeamId =
+            selectedGamesTeamId;
+    }
+
+    gamesTeamCards.innerHTML = [...teams]
+    .reverse()
+    .map((team) => {
+            const teamLabel = [
+                team.schoolName,
+                team.teamName
+            ]
+                .filter(Boolean)
+                .join(" — ");
+
+            const isSelected =
+                team.id === selectedGamesTeamId;
+
+            return `
+                <button
+                    type="button"
+                    class="gamesTeamCard ${
+                        isSelected
+                            ? "activeGamesTeamCard"
+                            : ""
+                    }"
+                    data-games-team-id="${team.id}"
+                >
+                    <span class="gamesTeamCardName">
+                        ${teamLabel || "Team"}
+                    </span>
+
+                    ${
+                        team.season
+                            ? `
+                                <span class="gamesTeamCardSeason">
+                                    ${team.season}
+                                </span>
+                            `
+                            : ""
+                    }
+                </button>
+            `;
+        })
+        .join("");
+
+    gamesTeamCards
+        .querySelectorAll(
+            "[data-games-team-id]"
+        )
+        .forEach((button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    gamesTeamCards.dataset.selectedTeamId =
+                        button.dataset.gamesTeamId;
+
+                    selectedTeamId =
+                        button.dataset.gamesTeamId;
+                        updateAppTeamBadge();
+
+                    renderGamesTeamFilter();
+                    renderGamesList();
+                }
+            );
+        });
+}
+
+
+function renderGamesList() {
+    const gamesList =
+    document.getElementById("gamesList");
+
+const gamesTeamCards =
+    document.getElementById("gamesTeamCards");
+
+if (!gamesList || !gamesTeamCards) {
+    return;
+}
+
+const selectedFilterTeamId =
+    gamesTeamCards.dataset.selectedTeamId;
+
+if (!selectedFilterTeamId) {
+    gamesList.innerHTML = `
+        <div class="emptyState">
+            <h3>Select a team</h3>
+            <p>Choose a team above to view its past games.</p>
+        </div>
+    `;
+
+    return;
+}
+
+    const filteredGames =
+        savedGames
+            .filter((game) => {
+                return (
+                    selectedFilterTeamId === "all" ||
+                    game.teamId === selectedFilterTeamId
+                );
+            })
+            .sort((a, b) => {
+                return (
+                    new Date(b.completedAt) -
+                    new Date(a.completedAt)
+                );
+            });
+
+    if (filteredGames.length === 0) {
+        gamesList.innerHTML = `
+            <div class="emptyState">
+                <h3>No games yet</h3>
+                <p>
+                    Your completed games will appear here.
+                </p>
+            </div>
+        `;
+
+        return;
+    }
+
+    gamesList.innerHTML =
+        filteredGames
+            .map((game) => {
+                const team =
+                    teams.find(
+                        (item) =>
+                            item.id === game.teamId
+                    );
+
                 const teamLabel = [
-                    team.schoolName,
-                    team.teamName
+                    team?.schoolName,
+                    team?.teamName
                 ]
                     .filter(Boolean)
                     .join(" — ");
 
+                let resultLetter = "T";
+                let resultClass = "gameResultTie";
+
+                if (
+                    game.teamScore >
+                    game.opponentScore
+                ) {
+                    resultLetter = "W";
+                    resultClass = "gameResultWin";
+                }
+
+                if (
+                    game.teamScore <
+                    game.opponentScore
+                ) {
+                    resultLetter = "L";
+                    resultClass = "gameResultLoss";
+                }
+
                 return `
-                    <option value="${team.id}">
-                        ${teamLabel}
-                    </option>
+                    <div class="pastGameCard">
+                        <div class="pastGameInfo">
+                            <h4>
+                                <span
+                                    class="gameResultBadge ${resultClass}"
+                                >
+                                    ${resultLetter}
+                                </span>
+
+                                ${teamLabel || "Team"}
+                                vs ${game.opponent}
+                            </h4>
+
+                            <p>
+                                ${
+                                    game.gameDate ||
+                                    "Date not entered"
+                                }
+                                ·
+                                ${game.teamScore}-${game.opponentScore}
+                            </p>
+                        </div>
+
+                        <button
+                            class="viewGameButton"
+                            type="button"
+                            data-games-view-game="${game.id}"
+                        >
+                            View Game
+                        </button>
+                    </div>
                 `;
             })
-            .join("")}
-    `;
+            .join("");
+
+    document
+        .querySelectorAll(
+            "[data-games-view-game]"
+        )
+        .forEach((button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    const game =
+                        savedGames.find(
+                            (item) =>
+                                item.id ===
+                                button.dataset.gamesViewGame
+                        );
+
+                    if (game) {
+                        selectedTeamId =
+                            game.teamId;
+                    }
+
+                    openSavedGameSummary(
+                        button.dataset.gamesViewGame
+                    );
+                }
+            );
+        });
 }
 
 document
@@ -2600,19 +3981,967 @@ document
     .getElementById("gamesBtn")
     .addEventListener("click", () => {
         renderGamesTeamFilter();
+        renderGamesList();
         showScreen("games");
     });
 
     document
     .getElementById("startNewGameButton")
     .addEventListener("click", () => {
+        const gamesTeamCards =
+            document.getElementById("gamesTeamCards");
+
+        const selectedGamesTeamId =
+            gamesTeamCards?.dataset.selectedTeamId;
+
+        if (!selectedGamesTeamId) {
+            alert("Please select a team before starting a game.");
+            return;
+        }
+
+        selectedTeamId = selectedGamesTeamId;
+        updateAppTeamBadge();
+
         showScreen("newGame");
     });
+
+    function renderReportsTeamFilter() {
+    const reportsTeamCards =
+        document.getElementById("reportsTeamCards");
+
+    if (!reportsTeamCards) {
+        return;
+    }
+
+    if (teams.length === 0) {
+        reportsTeamCards.innerHTML = `
+            <div class="emptyState">
+                <h3>No teams yet</h3>
+                <p>Create a team to view reports.</p>
+            </div>
+        `;
+        return;
+    }
+
+    reportsTeamCards.innerHTML = [...teams]
+    .reverse()
+    .map((team) => {
+            const teamLabel = [
+                team.schoolName,
+                team.teamName
+            ]
+                .filter(Boolean)
+                .join(" — ");
+
+            return `
+                <button
+                    type="button"
+                    class="reportsTeamCard"
+                    data-reports-team-id="${team.id}"
+                >
+                    ${teamLabel}
+                </button>
+            `;
+        })
+        .join("");
+}
+
+function renderReportsSeasonFilter() {
+    const reportsTeamCards =
+    document.getElementById("reportsTeamCards");
+
+    const reportsSeasonFilter =
+        document.getElementById("reportsSeasonFilter");
+
+    if (!reportsTeamCards || !reportsSeasonFilter) {
+        return;
+    }
+
+    const teamId =
+    reportsTeamCards.dataset.selectedTeamId || "";
+
+    reportsSeasonFilter.innerHTML = `
+        <option value="">Select Season</option>
+    `;
+
+    if (!teamId) {
+        return;
+    }
+
+    const team =
+        teams.find(
+            (item) => item.id === teamId
+        );
+
+    if (!team) {
+        return;
+    }
+
+    const seasons = new Set();
+
+    if (team.season) {
+        seasons.add(team.season);
+    }
+
+    savedGames
+        .filter(
+            (game) => game.teamId === teamId
+        )
+        .forEach((game) => {
+            const gameSeason =
+                game.season || team.season;
+
+            if (gameSeason) {
+                seasons.add(gameSeason);
+            }
+        });
+
+    const seasonList =
+        [...seasons].sort().reverse();
+
+    reportsSeasonFilter.innerHTML = `
+        <option value="">Select Season</option>
+
+        ${seasonList
+            .map((season) => {
+                return `
+                    <option value="${season}">
+                        ${season}
+                    </option>
+                `;
+            })
+            .join("")}
+    `;
+
+    if (team.season) {
+        reportsSeasonFilter.value =
+            team.season;
+    }
+}
+
+function renderTeamReport() {
+    const reportsTeamCards =
+    document.getElementById("reportsTeamCards");
+
+    const reportsContent =
+        document.getElementById("reportsContent");
+
+    if (!reportsTeamCards || !reportsContent) {
+        return;
+    }
+
+    const teamId =
+    reportsTeamCards.dataset.selectedTeamId || "";
+
+const reportsSeasonFilter =
+    document.getElementById("reportsSeasonFilter");
+
+const selectedSeason =
+    reportsSeasonFilter?.value || "";
+
+if (!teamId || !selectedSeason) {
+        reportsContent.innerHTML = `
+            <div class="emptyState">
+                <h3>Select a team</h3>
+                <p>
+                    Choose a team to view season reports.
+                </p>
+            </div>
+        `;
+
+        return;
+    }
+
+    const team =
+        teams.find(
+            (item) => item.id === teamId
+        );
+
+    const teamGames =
+    savedGames.filter((game) => {
+        if (game.teamId !== teamId) {
+            return false;
+        }
+
+        const gameSeason =
+            game.season || team.season;
+
+        return gameSeason === selectedSeason;
+    }); 
+
+    if (!team) {
+        return;
+    }
+
+    if (teamGames.length === 0) {
+        reportsContent.innerHTML = `
+            <div class="emptyState">
+                <h3>No completed games yet</h3>
+                <p>
+                    Complete a game for this team to begin building reports.
+                </p>
+            </div>
+        `;
+
+        return;
+    }
+
+    let wins = 0;
+    let losses = 0;
+    let ties = 0;
+    let totalPointsFor = 0;
+    let totalPointsAgainst = 0;
+
+    teamGames.forEach((game) => {
+        totalPointsFor +=
+            Number(game.teamScore) || 0;
+
+        totalPointsAgainst +=
+            Number(game.opponentScore) || 0;
+
+        if (game.teamScore > game.opponentScore) {
+            wins += 1;
+        } else if (
+            game.teamScore < game.opponentScore
+        ) {
+            losses += 1;
+        } else {
+            ties += 1;
+        }
+    });
+
+    const gamesPlayed =
+        teamGames.length;
+
+    const averagePointsFor =
+        (
+            totalPointsFor /
+            gamesPlayed
+        ).toFixed(1);
+
+    const averagePointsAgainst =
+        (
+            totalPointsAgainst /
+            gamesPlayed
+        ).toFixed(1);
+
+    const teamLabel = [
+        team.schoolName,
+        team.teamName
+    ]
+        .filter(Boolean)
+        .join(" — ");
+
+        const selectedTeamStats =
+    team.selectedTeamStats || [];
+
+const teamStatAverages =
+    selectedTeamStats.map((statKey) => {
+        if (
+            statKey === "fieldGoals" ||
+            statKey === "freeThrows"
+        ) {
+            let totalMade = 0;
+            let totalAttempted = 0;
+
+            teamGames.forEach((game) => {
+                const shootingStat =
+                    game.teamStats?.[statKey];
+
+                if (
+                    shootingStat &&
+                    typeof shootingStat === "object"
+                ) {
+                    totalMade +=
+                        Number(shootingStat.made) || 0;
+
+                    totalAttempted +=
+                        Number(shootingStat.attempted) || 0;
+                }
+            });
+
+            const averageMade =
+                gamesPlayed > 0
+                    ? totalMade / gamesPlayed
+                    : 0;
+
+            const averageAttempted =
+                gamesPlayed > 0
+                    ? totalAttempted / gamesPlayed
+                    : 0;
+
+            const percentage =
+                totalAttempted > 0
+                    ? Math.round(
+                        (totalMade / totalAttempted) * 100
+                    )
+                    : 0;
+
+            return {
+                statKey,
+                average:
+                    `${averageMade.toFixed(1)} / ` +
+                    `${averageAttempted.toFixed(1)} · ` +
+                    `${percentage}%`
+            };
+        }
+
+        let statTotal = 0;
+
+        teamGames.forEach((game) => {
+            statTotal +=
+                Number(
+                    game.teamStats?.[statKey]
+                ) || 0;
+        });
+
+        return {
+            statKey,
+            average:
+                (
+                    statTotal /
+                    gamesPlayed
+                ).toFixed(1)
+        };
+    });
+
+    const selectedPlayerStats =
+    (team.selectedPlayerStats || [])
+        .filter((statKey) => {
+            return statKey !== "points";
+        });
+
+const playerSeasonStats =
+    team.roster.map((player) => {
+        let totalPoints = 0;
+        let gamesPlayedByPlayer = 0;
+
+        const statTotals = {};
+
+        selectedPlayerStats.forEach((statKey) => {
+            statTotals[statKey] = 0;
+        });
+
+        teamGames.forEach((game) => {
+            const gamePlayerStats =
+                game.playerStatsById?.[player.id];
+
+            if (!gamePlayerStats) {
+                return;
+            }
+
+            gamesPlayedByPlayer += 1;
+
+            totalPoints +=
+                Number(gamePlayerStats.points) || 0;
+
+            selectedPlayerStats.forEach(
+                (statKey) => {
+                    statTotals[statKey] +=
+                        Number(
+                            gamePlayerStats[statKey]
+                        ) || 0;
+                }
+            );
+        });
+
+        const offensiveRebounds =
+    Number(
+        statTotals.offensiveRebounds
+    ) || 0;
+
+const defensiveRebounds =
+    Number(
+        statTotals.defensiveRebounds
+    ) || 0;
+
+const totalRebounds =
+    offensiveRebounds +
+    defensiveRebounds;
+
+return {
+    id: player.id,
+    number: player.number,
+    name: player.name,
+    gamesPlayed: gamesPlayedByPlayer,
+    totalPoints,
+    pointsPerGame:
+        gamesPlayedByPlayer > 0
+            ? (
+                totalPoints /
+                gamesPlayedByPlayer
+            ).toFixed(1)
+            : "0.0",
+    averageRebounds:
+        gamesPlayedByPlayer > 0
+            ? (
+                totalRebounds /
+                gamesPlayedByPlayer
+            ).toFixed(1)
+            : "0.0",
+    statTotals
+};
+});
+
+    reportsContent.innerHTML = `
+        <div class="reportSection">
+            <h3>${teamLabel}</h3>
+
+            <div class="reportOverviewGrid">
+                <div class="reportStatCard">
+                    <span class="reportStatLabel">
+                        Games
+                    </span>
+
+                    <strong class="reportStatValue">
+                        ${gamesPlayed}
+                    </strong>
+                </div>
+
+                <div class="reportStatCard">
+                    <span class="reportStatLabel">
+                        Record
+                    </span>
+
+                    <strong class="reportStatValue">
+                        ${wins}-${losses}${
+                            ties > 0
+                                ? `-${ties}`
+                                : ""
+                        }
+                    </strong>
+                </div>
+
+                <div class="reportStatCard">
+                    <span class="reportStatLabel">
+                        PPG
+                    </span>
+
+                    <strong class="reportStatValue">
+                        ${averagePointsFor}
+                    </strong>
+                </div>
+
+                <div class="reportStatCard">
+                    <span class="reportStatLabel">
+                        Opponent PPG
+                    </span>
+
+                    <strong class="reportStatValue">
+                        ${averagePointsAgainst}
+                    </strong>
+                                </div>
+            </div>
+
+            <div class="reportTeamAverages">
+                <h4>Team Averages</h4>
+
+                <div class="reportAveragesGrid">
+                    ${teamStatAverages
+                        .map((stat) => {
+                            const statLabel =
+                                stat.statKey
+                                    .replace(
+                                        /([A-Z])/g,
+                                        " $1"
+                                    )
+                                    .replace(
+                                        /^./,
+                                        (letter) =>
+                                            letter.toUpperCase()
+                                    );
+
+                            return `
+                                <div class="reportAverageCard">
+                                    <span class="reportAverageLabel">
+                                        ${statLabel}
+                                    </span>
+
+                                    <strong class="reportAverageValue">
+                                        ${stat.average}
+                                    </strong>
+                                </div>
+                            `;
+                        })
+                        .join("")}
+                </div>
+            </div>
+        </div>
+                        </div>
+            </div>
+
+            <div class="reportPlayerStats">
+                <h4>Player Season Stats</h4>
+
+                <div class="reportPlayerTableWrap">
+                    <table class="reportPlayerTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th>GP</th>
+<th>PTS</th>
+<th>PPG</th>
+<th>AVG REB</th>
+
+${selectedPlayerStats
+    .map((statKey) => {
+        const playerStatLabels = {
+            offensiveRebounds: "ORebs",
+            defensiveRebounds: "DRebs",
+            turnovers: "TO's"
+        };
+
+        const statLabel =
+            playerStatLabels[statKey] ||
+            statKey
+                .replace(
+                    /([A-Z])/g,
+                    " $1"
+                )
+                .replace(
+                    /^./,
+                    (letter) =>
+                        letter.toUpperCase()
+                );
+
+        return `
+            <th>
+                ${statLabel}
+            </th>
+        `;
+    })
+    .join("")}
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            ${playerSeasonStats
+                                .map((player) => {
+                                    return `
+                                        <tr>
+                                            <td>
+                                                ${player.number || ""}
+                                            </td>
+
+                                            <td>
+                                                ${player.name}
+                                            </td>
+
+                                            <td>
+                                                ${player.gamesPlayed}
+                                            </td>
+
+                                            <td>
+    ${player.totalPoints}
+</td>
+
+<td>
+    ${player.pointsPerGame}
+</td>
+
+<td>
+    ${player.averageRebounds}
+</td>
+
+${selectedPlayerStats
+                                                .map((statKey) => {
+                                                    return `
+                                                        <td>
+                                                            ${
+                                                                player
+                                                                    .statTotals[
+                                                                        statKey
+                                                                    ] || 0
+                                                            }
+                                                        </td>
+                                                    `;
+                                                })
+                                                .join("")}
+                                        </tr>
+                                    `;
+                                })
+                                .join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+                        </div>
+        </div>
+
+        <div class="reportPlayerGameDetail">
+    <div class="reportPlayerGameHeader">
+        <h4>Player Game-by-Game</h4>
+
+        <label class="reportPlayerFilter">
+            Player
+
+            <select id="reportPlayerFilter">
+                <option value="">
+                    Select Player
+                </option>
+
+                ${playerSeasonStats
+                    .map((player) => {
+                        return `
+                            <option value="${player.id}">
+                                ${
+                                    player.number
+                                        ? `#${player.number} `
+                                        : ""
+                                }${player.name}
+                            </option>
+                        `;
+                    })
+                    .join("")}
+            </select>
+        </label>
+    </div>
+
+    <div id="reportPlayerGameContent">
+        <div class="reportPlayerPrompt">
+            Select a player to view game-by-game stats.
+        </div>
+    </div>
+</div>
+
+        <div class="reportGameTrends">
+            <h4>Game-by-Game Team Trends</h4>
+
+            <div class="reportPlayerTableWrap">
+                <table class="reportPlayerTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Opp</th>
+                            <th>Result</th>
+                            <th>Score</th>
+
+                            ${selectedTeamStats
+                                .map((statKey) => {
+                                    const teamStatLabels = {
+    offensiveRebounds: "ORebs",
+    defensiveRebounds: "DRebs",
+    opponentOffensiveRebounds: "Opp ORebs",
+    transitionPoints: "Trans Pts",
+    paintTouches: "Paint Tchs",
+    turnovers: "TO's",
+    forcedTurnovers: "Forced TO's",
+    fouls: "Fouls"
+};
+
+                                    const statLabel =
+                                        teamStatLabels[statKey] ||
+                                        statKey
+                                            .replace(
+                                                /([A-Z])/g,
+                                                " $1"
+                                            )
+                                            .replace(
+                                                /^./,
+                                                (letter) =>
+                                                    letter.toUpperCase()
+                                            );
+
+                                    return `
+                                        <th>${statLabel}</th>
+                                    `;
+                                })
+                                .join("")}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        ${teamGames
+                            .map((game) => {
+                                let result = "T";
+
+                                if (
+                                    game.teamScore >
+                                    game.opponentScore
+                                ) {
+                                    result = "W";
+                                }
+
+                                if (
+                                    game.teamScore <
+                                    game.opponentScore
+                                ) {
+                                    result = "L";
+                                }
+
+                                return `
+                                    <tr>
+                                        <td>
+                                            ${game.gameDate || "—"}
+                                        </td>
+
+                                        <td>
+                                            ${game.opponent || "—"}
+                                        </td>
+
+                                        <td>
+                                            ${result}
+                                        </td>
+
+                                        <td>
+                                            ${game.teamScore}-${game.opponentScore}
+                                        </td>
+
+                                        ${selectedTeamStats
+    .map((statKey) => {
+        const statValue =
+            game.teamStats?.[statKey];
+
+        if (
+    statKey === "fieldGoals" ||
+    statKey === "threePointers" ||
+    statKey === "freeThrows"
+) {
+            return `
+                <td>
+                    ${formatShootingStat(statValue)}
+                </td>
+            `;
+        }
+
+        return `
+            <td>
+                ${Number(statValue) || 0}
+            </td>
+        `;
+    })
+    .join("")}
+                                    </tr>
+                                `;
+                            })
+                            .join("")}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+`;
+}
+
+function renderPlayerGameReport() {
+    const playerFilter =
+        document.getElementById("reportPlayerFilter");
+
+    const playerContent =
+        document.getElementById("reportPlayerGameContent");
+
+    const reportsSeasonFilter =
+        document.getElementById("reportsSeasonFilter");
+
+    if (
+    !playerFilter ||
+    !playerContent ||
+    !reportsSeasonFilter
+) {
+    return;
+}
+
+    const playerId = playerFilter.value;
+    const reportsTeamCards =
+    document.getElementById("reportsTeamCards");
+
+const teamId =
+    reportsTeamCards?.dataset.selectedTeamId || "";
+    const selectedSeason = reportsSeasonFilter.value;
+
+    if (!playerId) {
+        playerContent.innerHTML = `
+            <div class="reportPlayerPrompt">
+                Select a player to view game-by-game stats.
+            </div>
+        `;
+        return;
+    }
+
+    const team =
+        teams.find(
+            (item) => item.id === teamId
+        );
+
+    if (!team) {
+        return;
+    }
+
+    const player =
+        team.roster.find(
+            (item) => item.id === playerId
+        );
+
+    if (!player) {
+        return;
+    }
+
+    const playerStats =
+        (team.selectedPlayerStats || [])
+            .filter((statKey) => {
+                return statKey !== "points";
+            });
+
+    const playerGames =
+        savedGames.filter((game) => {
+            if (game.teamId !== teamId) {
+                return false;
+            }
+
+            const gameSeason =
+                game.season || team.season;
+
+            return (
+                gameSeason === selectedSeason &&
+                game.playerStatsById?.[playerId]
+            );
+        });
+
+    playerContent.innerHTML = `
+        <div class="reportPlayerTableWrap">
+            <table class="reportPlayerTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Opp</th>
+                        <th>PTS</th>
+                        <th>REB</th>
+
+                        ${playerStats
+                            .map((statKey) => {
+                                const statLabels = {
+                                    offensiveRebounds: "ORebs",
+                                    defensiveRebounds: "DRebs",
+                                    turnovers: "TO's",
+                                    assists: "AST",
+                                    steals: "STL",
+                                    blocks: "BLK"
+                                };
+
+                                return `
+                                    <th>
+                                        ${
+                                            statLabels[statKey] ||
+                                            statKey
+                                        }
+                                    </th>
+                                `;
+                            })
+                            .join("")}
+                    </tr>
+                </thead>
+
+                <tbody>
+                    ${playerGames
+                        .map((game) => {
+                            const stats =
+    game.playerStatsById[playerId];
+
+const totalRebounds =
+    (Number(stats.offensiveRebounds) || 0) +
+    (Number(stats.defensiveRebounds) || 0);
+
+return `
+                                <tr>
+                                    <td>
+                                        ${game.gameDate || "—"}
+                                    </td>
+
+                                    <td>
+                                        ${game.opponent || "—"}
+                                    </td>
+
+                                    <td>
+    ${Number(stats.points) || 0}
+</td>
+
+<td>
+    ${totalRebounds}
+</td>
+
+${playerStats
+                                        .map((statKey) => {
+                                            return `
+                                                <td>
+                                                    ${
+                                                        Number(
+                                                            stats[
+                                                                statKey
+                                                            ]
+                                                        ) || 0
+                                                    }
+                                                </td>
+                                            `;
+                                        })
+                                        .join("")}
+                                </tr>
+                            `;
+                        })
+                        .join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
 
 document
     .getElementById("reportsBtn")
     .addEventListener("click", () => {
+        renderReportsTeamFilter();
+        renderReportsSeasonFilter();
         showScreen("reports");
+    });
+
+    document
+    .getElementById("reportsTeamCards")
+    .addEventListener("click", (event) => {
+        const card = event.target.closest(
+            "[data-reports-team-id]"
+        );
+
+        if (!card) {
+            return;
+        }
+
+        const reportsTeamCards =
+            document.getElementById("reportsTeamCards");
+
+        reportsTeamCards.dataset.selectedTeamId =
+            card.dataset.reportsTeamId;
+            selectedTeamId =
+    card.dataset.reportsTeamId;
+
+updateAppTeamBadge();
+
+        document
+            .querySelectorAll(".reportsTeamCard")
+            .forEach((teamCard) => {
+                teamCard.classList.toggle(
+                    "activeReportsTeamCard",
+                    teamCard === card
+                );
+            });
+
+        renderReportsSeasonFilter();
+        renderTeamReport();
+    });
+
+    document
+    .getElementById("reportsSeasonFilter")
+    .addEventListener("change", () => {
+        renderTeamReport();
+    });
+
+    document
+    .getElementById("reportsContent")
+    .addEventListener("change", (event) => {
+        if (
+            event.target.id ===
+            "reportPlayerFilter"
+        ) {
+            renderPlayerGameReport();
+        }
     });
 
 document
@@ -2654,18 +4983,26 @@ document
                     >
 
                     <input
-                        type="text"
-                        placeholder="Player name"
-                        aria-label="Player name"
-                        data-player-name
-                    >
+    type="text"
+    placeholder="Player name"
+    aria-label="Player name"
+    data-player-name
+>
 
-                    <button
-                        class="removePlayerButton"
-                        type="button"
-                    >
-                        Delete Player
-                    </button>
+<label class="keepAtTopOption">
+    <input
+        type="checkbox"
+        data-player-keep-at-top
+    >
+    <span>Starter</span>
+</label>
+
+<button
+    class="removePlayerButton"
+    type="button"
+>
+    Delete Player
+</button>
                 </div>
             `
         );
@@ -2716,7 +5053,49 @@ document
 
 document
     .getElementById("confirmStartGameButton")
-    .addEventListener("click", startLiveGame);
+    .addEventListener("click", () => {
+        if (editingLiveGameSetup) {
+            saveLiveGameSetupChanges();
+        } else {
+            startLiveGame();
+        }
+    });
+    document
+    .getElementById("editGameSetupButton")
+    .addEventListener("click", () => {
+        if (!liveGameState) {
+            return;
+        }
+
+        const team = getSelectedTeam();
+
+        if (!team) {
+            return;
+        }
+
+        editingLiveGameSetup = true;
+
+        document.getElementById(
+    "backToGameSetupButton"
+).style.display = "none";
+
+document.getElementById(
+    "confirmStartGameButton"
+).textContent = "CONTINUE GAME";
+
+        currentGameSetup = {
+            ...liveGameState
+        };
+
+        renderGameStatChoices(
+            team,
+            liveGameState.selectedTeamStats,
+            liveGameState.selectedPlayerStats
+        );
+
+        showScreen("gameConfirmation");
+    });
+
     document
     .getElementById("playersTabButton")
     .addEventListener("click", () => {
@@ -2724,10 +5103,6 @@ document
             .getElementById("playersTabButton")
             .classList.add("activeTrackerTab");
 
-        document
-            .getElementById("teamTabButton")
-            .classList.remove("activeTrackerTab");
-
             document
     .getElementById("summaryTabButton")
     .classList.remove("activeTrackerTab");
@@ -2740,37 +5115,6 @@ document
     .getElementById("summaryTrackerPanel")
     .classList.remove("activeTrackerPanel");
 
-        document
-            .getElementById("teamTrackerPanel")
-            .classList.remove("activeTrackerPanel");
-    });
-
-document
-    .getElementById("teamTabButton")
-    .addEventListener("click", () => {
-        document
-            .getElementById("teamTabButton")
-            .classList.add("activeTrackerTab");
-
-        document
-            .getElementById("playersTabButton")
-            .classList.remove("activeTrackerTab");
-
-            document
-    .getElementById("summaryTabButton")
-    .classList.remove("activeTrackerTab");
-
-        document
-            .getElementById("teamTrackerPanel")
-            .classList.add("activeTrackerPanel");
-
-            document
-    .getElementById("summaryTrackerPanel")
-    .classList.remove("activeTrackerPanel");
-
-        document
-            .getElementById("playerTrackerPanel")
-            .classList.remove("activeTrackerPanel");
     });
 
     document
@@ -2785,19 +5129,11 @@ document
             .classList.remove("activeTrackerTab");
 
         document
-            .getElementById("teamTabButton")
-            .classList.remove("activeTrackerTab");
-
-        document
             .getElementById("summaryTrackerPanel")
             .classList.add("activeTrackerPanel");
 
         document
             .getElementById("playerTrackerPanel")
-            .classList.remove("activeTrackerPanel");
-
-        document
-            .getElementById("teamTrackerPanel")
             .classList.remove("activeTrackerPanel");
 
         renderLiveSummary();
@@ -2860,8 +5196,20 @@ document
         }
     });
 document
+    document
     .getElementById("finishGameButton")
-    .addEventListener("click", openGameSummary);
+    .addEventListener("click", () => {
+        const confirmed = window.confirm(
+            "Are you sure you want to finish this game?"
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        openGameSummary();
+    });
+
     document
     .getElementById("saveCompletedGameButton")
     .addEventListener("click", saveCompletedGame);
@@ -2881,9 +5229,44 @@ document
 
         showScreen("liveGame");
     });
+
+    homeButton.addEventListener("click", () => {
+    const activeScreen =
+        document.querySelector(".activeScreen");
+
+    if (activeScreen?.id === "liveGameScreen") {
+        const confirmed = window.confirm(
+            "Leave this game?\n\nIf you continue, all unsaved game stats will be lost and you will return to Home."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    showScreen("home");
+});
+
 backButton.addEventListener("click", () => {
     const activeScreen =
         document.querySelector(".activeScreen");
+
+        if (
+    activeScreen.id === "liveGameScreen" &&
+    document
+        .getElementById("summaryTabButton")
+        .classList.contains("activeTrackerTab")
+) {
+    document.getElementById("playersTabButton").click();
+    return;
+}   
+
+        console.log(
+    "ACTIVE SCREENS:",
+    [...document.querySelectorAll(".activeScreen")].map(
+        (screen) => screen.id
+    )
+);
 
     if (viewingSavedGame) {
         const team = getSelectedTeam();
@@ -2894,6 +5277,61 @@ backButton.addEventListener("click", () => {
             return;
         }
     }
+
+    if (activeScreen.id === "gameSummaryScreen") {
+    showScreen("liveGame");
+    return;
+    }
+
+    if (activeScreen.id === "liveGameScreen") {
+    const team = getSelectedTeam();
+
+    if (!team || !liveGameState) {
+        return;
+    }
+
+    editingLiveGameSetup = true;
+
+    document.getElementById("backToGameSetupButton").style.display = "none";
+
+document.getElementById("confirmStartGameButton").textContent =
+    "CONTINUE GAME";
+
+    currentGameSetup = {
+        ...liveGameState
+    };
+
+    renderGameStatChoices(
+        team,
+        liveGameState.selectedTeamStats,
+        liveGameState.selectedPlayerStats
+    );
+
+    showScreen("gameConfirmation");
+    return;
+}
+
+if (
+    activeScreen.id === "gameConfirmationScreen" &&
+    editingLiveGameSetup
+) {
+    editingLiveGameSetup = false;
+    showScreen("liveGame");
+    return;
+}
+
+if (
+    activeScreen.id === "gameConfirmationScreen" &&
+    !editingLiveGameSetup
+) {
+    showScreen("newGame");
+    return;
+}
+
+if (activeScreen.id === "newGameScreen") {
+    showScreen("games");
+    return;
+}
 
     if (
         activeScreen.id === "teamSetupScreen" ||
@@ -2907,4 +5345,62 @@ backButton.addEventListener("click", () => {
 
 renderStatChoices();
 renderTeams();
-showScreen("home");
+
+const savedLiveGameRecovery =
+    localStorage.getItem("court94LiveGameRecovery");
+
+if (savedLiveGameRecovery) {
+    try {
+        const recoveryData =
+            JSON.parse(savedLiveGameRecovery);
+
+        if (recoveryData.liveGameState) {
+            liveGameState =
+                recoveryData.liveGameState;
+
+            liveActionHistory =
+                recoveryData.liveActionHistory || [];
+
+            selectedLivePlayerId =
+                recoveryData.selectedLivePlayerId || null;
+
+            selectedTeamId =
+                recoveryData.selectedTeamId || null;
+
+            currentGameSetup =
+                recoveryData.currentGameSetup || null;
+        }
+    } catch (error) {
+        console.error(
+            "Court94 could not restore the live game.",
+            error
+        );
+    }
+}
+
+const savedScreen =
+    localStorage.getItem("court94CurrentScreen");
+
+    if (
+    savedScreen === "liveGame" &&
+    liveGameState &&
+    selectedTeamId
+) {
+    renderLiveGame();
+}
+
+if (savedScreen === "games") {
+    renderGamesTeamFilter();
+    renderGamesList();
+}
+
+if (savedScreen === "reports") {
+    renderReportsTeamFilter();
+    renderReportsSeasonFilter();
+}
+
+if (savedScreen && screens[savedScreen]) {
+    showScreen(savedScreen);
+} else {
+    showScreen("home");
+}
