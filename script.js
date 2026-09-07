@@ -1895,9 +1895,21 @@ function recordShootingResult(statKey, result) {
         result,
         period: currentPeriod,
         description:
-            result === "make"
-                ? `${statKey === "fieldGoals" ? "Field Goal" : "Free Throw"} — Make`
-                : `${statKey === "fieldGoals" ? "Field Goal" : "Free Throw"} — Miss`
+    result === "make"
+        ? `${
+              statKey === "fieldGoals"
+                  ? "Field Goal"
+                  : statKey === "threePointers"
+                  ? "3-Pointer"
+                  : "Free Throw"
+          } — Make`
+        : `${
+              statKey === "fieldGoals"
+                  ? "Field Goal"
+                  : statKey === "threePointers"
+                  ? "3-Pointer"
+                  : "Free Throw"
+          } — Miss`
     });
 
     renderTeamStatButtons();
@@ -2649,7 +2661,8 @@ const teamStatRows =
 
 const displayPeriodValue =
     statKey === "fieldGoals" ||
-    statKey === "freeThrows"
+statKey === "threePointers" ||
+statKey === "freeThrows"
         ? `${periodValue?.made || 0} / ${periodValue?.attempted || 0} - ${
             (periodValue?.attempted || 0) > 0
                 ? Math.round(
@@ -2672,7 +2685,8 @@ return `
 <td>
     ${
         statKey === "fieldGoals" ||
-        statKey === "freeThrows"
+statKey === "threePointers" ||
+statKey === "freeThrows"    
             ? `${game.teamStats?.[statKey]?.made || 0} / ${
                 game.teamStats?.[statKey]?.attempted || 0
               } - ${
@@ -4239,7 +4253,8 @@ const teamStatAverages =
     selectedTeamStats.map((statKey) => {
         if (
             statKey === "fieldGoals" ||
-            statKey === "freeThrows"
+statKey === "threePointers" ||
+statKey === "freeThrows"
         ) {
             let totalMade = 0;
             let totalAttempted = 0;
