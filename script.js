@@ -12,6 +12,11 @@ const teamStats = [
         description: "Track team defensive rebounds."
     },
     {
+    key: "turnovers",
+    name: "Team Turnovers",
+    description: "Track your team's turnovers."
+},
+{   
         key: "forcedTurnovers",
         name: "Forced Turnovers",
         description: "Turnovers created by your defense."
@@ -103,6 +108,8 @@ let selectedTeamId = null;
 let currentGameSetup = null;
 let liveGameState = null;
 let selectedLivePlayerId = null;
+let pendingSubOutPlayerIds = [];
+let pendingSubInPlayerIds = [];
 let liveActionHistory = [];
 let viewingSavedGame = false;
 let editingLiveGameSetup = false;
@@ -822,6 +829,13 @@ const selectedGamePlayerStats = Array.from(
         ...currentGameSetup,
 
         gameStarters,
+currentFive: [...gameStarters],
+playerDisplayOrder: [
+    ...gameStarters,
+    ...team.roster
+        .filter((player) => !gameStarters.includes(player.id))
+        .map((player) => player.id)
+],
 
         selectedTeamStats: selectedGameTeamStats,
 selectedPlayerStats: selectedGamePlayerStats,
@@ -910,6 +924,7 @@ periodSelect.value = liveGameState.period;
     connectPlayerCardButtons();
     renderPlayerStatButtons();
     renderTeamStatButtons();
+    updateLiveTeamPointTotal();
     renderLastAction();
 }
 
@@ -921,19 +936,37 @@ function renderPlayerBench() {
         document.getElementById("playerBench");
 
     const uniquePlayerStats = [
-        ...new Set(team.selectedPlayerStats || [])
-    ];
-const sortedRoster = [
-    ...team.roster
-].sort((a, b) => {
-    if (a.keepAtTop === b.keepAtTop) {
-        return 0;
-    }
+    ...new Set(
+        liveGameState?.selectedPlayerStats ||
+        team.selectedPlayerStats ||
+        []
+    )
+];
+const currentFive =
+    liveGameState?.currentFive || [];
 
-    return a.keepAtTop ? -1 : 1;
-});
+if (!liveGameState.playerDisplayOrder) {
+    liveGameState.playerDisplayOrder = [
+        ...currentFive,
+        ...team.roster
+            .filter(
+                (player) =>
+                    !currentFive.includes(player.id)
+            )
+            .map((player) => player.id)
+    ];
+}
+
+const sortedRoster =
+    liveGameState.playerDisplayOrder
+        .map((playerId) =>
+            team.roster.find(
+                (player) => player.id === playerId
+            )
+        )
+        .filter(Boolean);
     playerBench.innerHTML = sortedRoster
-        .map((player) => {
+        .map((player, index) => {
             const points =
                 getPlayerStatTotal(
                     player.id,
@@ -995,6 +1028,20 @@ const sortedRoster = [
                             </strong>
                         </div>
 
+                        <button
+    class="playerSubButton"
+    type="button"
+    data-sub-player-id="${player.id}"
+    data-sub-action="${
+        currentFive.includes(player.id) ? "out" : "in"
+    }"
+>
+    ${
+        currentFive.includes(player.id)
+            ? "SUB OUT"
+            : "SUB IN"
+    }
+</button>
                         <div class="playerCardPoints">
                             <strong>${points}</strong>
                             <span>PTS</span>
@@ -1051,10 +1098,32 @@ const sortedRoster = [
                         ↶ Undo
                     </button>
 
-                </article>
-            `;
+             </article>
+
+${index === 4 ? `<div class="benchDivider">BENCH</div>` : ""}
+`;
         })
         .join("");
+}
+
+function updateLiveTeamPointTotal() {
+    const totalElement =
+        document.getElementById("liveTeamPointTotal");
+
+    if (!totalElement || !liveGameState) {
+        return;
+    }
+
+    const totalPoints =
+        Object.values(
+            liveGameState.playerStatsById || {}
+        ).reduce(
+            (sum, playerStats) =>
+                sum + (playerStats.points || 0),
+            0
+        );
+
+    totalElement.textContent = totalPoints;
 }
 function connectPlayerCardButtons() {
     document
@@ -1097,6 +1166,113 @@ function connectPlayerCardButtons() {
             undoLastPlayerAction(
                 button.dataset.cardPlayerUndo
             );
+        });
+    });
+    document
+    .querySelectorAll(".playerSubButton")
+    .forEach((button) => {
+        const playerId = String(button.dataset.subPlayerId);
+        const action = button.dataset.subAction;
+
+        if (
+            (action === "out" &&
+                pendingSubOutPlayerIds.includes(playerId)) ||
+            (action === "in" &&
+                pendingSubInPlayerIds.includes(playerId))
+        ) {
+            button.classList.add("pendingSubButton");
+        }
+
+        button.addEventListener("click", () => {
+            if (action === "out") {
+                if (pendingSubOutPlayerIds.includes(playerId)) {
+                    pendingSubOutPlayerIds =
+                        pendingSubOutPlayerIds.filter(
+                            (id) => id !== playerId
+                        );
+                } else {
+                    pendingSubOutPlayerIds.push(playerId);
+                }
+            }
+
+            if (action === "in") {
+                if (pendingSubInPlayerIds.includes(playerId)) {
+                    pendingSubInPlayerIds =
+                        pendingSubInPlayerIds.filter(
+                            (id) => id !== playerId
+                        );
+                } else {
+                    pendingSubInPlayerIds.push(playerId);
+                }
+            }
+
+            while (
+                pendingSubOutPlayerIds.length > 0 &&
+                pendingSubInPlayerIds.length > 0
+            ) {
+                const outPlayerId =
+                    pendingSubOutPlayerIds.shift();
+
+                const inPlayerId =
+                    pendingSubInPlayerIds.shift();
+
+                const currentFiveIndex =
+                    liveGameState.currentFive.findIndex(
+                        (id) =>
+                            String(id) === String(outPlayerId)
+                    );
+
+                if (currentFiveIndex !== -1) {
+                    const incomingDisplayId =
+                        liveGameState.playerDisplayOrder.find(
+                            (id) =>
+                                String(id) === String(inPlayerId)
+                        );
+
+                    if (incomingDisplayId !== undefined) {
+                        liveGameState.currentFive[
+                            currentFiveIndex
+                        ] = incomingDisplayId;
+                    }
+                }
+
+                const outDisplayIndex =
+                    liveGameState.playerDisplayOrder.findIndex(
+                        (id) =>
+                            String(id) === String(outPlayerId)
+                    );
+
+                const inDisplayIndex =
+                    liveGameState.playerDisplayOrder.findIndex(
+                        (id) =>
+                            String(id) === String(inPlayerId)
+                    );
+
+                if (
+                    outDisplayIndex !== -1 &&
+                    inDisplayIndex !== -1
+                ) {
+                    [
+                        liveGameState.playerDisplayOrder[
+                            outDisplayIndex
+                        ],
+                        liveGameState.playerDisplayOrder[
+                            inDisplayIndex
+                        ]
+                    ] = [
+                        liveGameState.playerDisplayOrder[
+                            inDisplayIndex
+                        ],
+                        liveGameState.playerDisplayOrder[
+                            outDisplayIndex
+                        ]
+                    ];
+                }
+            }
+
+            renderPlayerBench();
+            connectPlayerCardButtons();
+            saveLiveGameState();
         });
     });
 }
@@ -1768,6 +1944,38 @@ const periodPlayerState =
 periodPlayerState.points =
     (periodPlayerState.points || 0) + points;
 
+    // Link Player +1 Point to Team Free Throw Make
+if (points === 1) {
+    if (
+        !liveGameState.teamStats.freeThrows ||
+        typeof liveGameState.teamStats.freeThrows !== "object"
+    ) {
+        liveGameState.teamStats.freeThrows = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStats.freeThrows.attempted += 1;
+    liveGameState.teamStats.freeThrows.made += 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    if (
+        !liveGameState.teamStatsByPeriod[currentPeriod].freeThrows ||
+        typeof liveGameState.teamStatsByPeriod[currentPeriod].freeThrows !== "object"
+    ) {
+        liveGameState.teamStatsByPeriod[currentPeriod].freeThrows = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.attempted += 1;
+    liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.made += 1;
+}   
     liveActionHistory.push({
         type: "playerPoints",
         playerId: player.id,
@@ -1781,6 +1989,8 @@ periodPlayerState.points =
 
     renderPlayerBench();
 renderPlayerStatButtons();
+renderTeamStatButtons();
+updateLiveTeamPointTotal();
 renderLastAction();
 
 saveLiveGameState();
@@ -1821,6 +2031,55 @@ const periodPlayerState =
 periodPlayerState[statKey] =
     (periodPlayerState[statKey] || 0) + 1;
 
+    // Link Player Defensive Rebound to Team Defensive Rebound
+if (statKey === "defensiveRebounds") {
+
+    liveGameState.teamStats.defensiveRebounds =
+        (liveGameState.teamStats.defensiveRebounds || 0) + 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].defensiveRebounds =
+        (
+            liveGameState.teamStatsByPeriod[currentPeriod]
+                .defensiveRebounds || 0
+        ) + 1;
+}
+
+// Link Player Offensive Rebound to Team Offensive Rebound
+if (statKey === "offensiveRebounds") {
+    liveGameState.teamStats.offensiveRebounds =
+        (liveGameState.teamStats.offensiveRebounds || 0) + 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].offensiveRebounds =
+        (
+            liveGameState.teamStatsByPeriod[currentPeriod]
+                .offensiveRebounds || 0
+        ) + 1;
+}
+
+// Link Player Turnover to Team Turnover
+if (statKey === "turnovers") {
+    liveGameState.teamStats.turnovers =
+        (liveGameState.teamStats.turnovers || 0) + 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].turnovers =
+        (
+            liveGameState.teamStatsByPeriod[currentPeriod]
+                .turnovers || 0
+        ) + 1;
+}
+
     liveActionHistory.push({
         type: "playerStat",
         playerId: player.id,
@@ -1833,6 +2092,7 @@ periodPlayerState[statKey] =
 
     renderPlayerStatButtons();
 renderLastAction();
+renderTeamStatButtons();
 
 saveLiveGameState();
 }
@@ -1889,6 +2149,40 @@ function recordShootingResult(statKey, result) {
         periodShootingStat.made += 1;
     }
 
+    // Every 3-point attempt is also a field-goal attempt
+if (statKey === "threePointers") {
+    if (
+        !liveGameState.teamStats.fieldGoals ||
+        typeof liveGameState.teamStats.fieldGoals !== "object"
+    ) {
+        liveGameState.teamStats.fieldGoals = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStats.fieldGoals.attempted += 1;
+
+    if (result === "make") {
+        liveGameState.teamStats.fieldGoals.made += 1;
+    }
+
+    if (
+        !liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals ||
+        typeof liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals !== "object"
+    ) {
+        liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.attempted += 1;
+
+    if (result === "make") {
+        liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
+    }
+}
     liveActionHistory.push({
         type: "shootingStat",
         statKey,
@@ -1985,6 +2279,44 @@ function undoShootingResult(statKey) {
         }
     }
 
+    if (statKey === "threePointers") {
+    const fieldGoals =
+        liveGameState.teamStats.fieldGoals;
+
+    if (fieldGoals && typeof fieldGoals === "object") {
+        fieldGoals.attempted =
+            Math.max(0, (fieldGoals.attempted || 0) - 1);
+
+        if (action.result === "make") {
+            fieldGoals.made =
+                Math.max(0, (fieldGoals.made || 0) - 1);
+        }
+    }
+
+    const periodFieldGoals =
+        liveGameState.teamStatsByPeriod?.[
+            action.period
+        ]?.fieldGoals;
+
+    if (
+        periodFieldGoals &&
+        typeof periodFieldGoals === "object"
+    ) {
+        periodFieldGoals.attempted =
+            Math.max(
+                0,
+                (periodFieldGoals.attempted || 0) - 1
+            );
+
+        if (action.result === "make") {
+            periodFieldGoals.made =
+                Math.max(
+                    0,
+                    (periodFieldGoals.made || 0) - 1
+                );
+        }
+    }
+}
     liveActionHistory.splice(actionIndex, 1);
 
     renderTeamStatButtons();
@@ -1992,6 +2324,7 @@ function undoShootingResult(statKey) {
 }
 
 function recordTeamStat(statKey, amount = 1) {
+    
     const stat = teamStats.find(
         (item) => item.key === statKey
     );
@@ -2034,7 +2367,7 @@ liveGameState.teamStatsByPeriod[
     liveActionHistory.push({
         type: "teamStat",
         statKey,
-        amount: 1,
+        amount,
         period: liveGameState.period,
         description:
             `Team — ${stat.name}`
@@ -3090,6 +3423,41 @@ if (periodPlayerState) {
 }
         }
 
+        if (action.amount === 1) {
+    const freeThrows =
+        liveGameState.teamStats.freeThrows;
+
+    if (freeThrows && typeof freeThrows === "object") {
+        freeThrows.attempted =
+            Math.max(0, (freeThrows.attempted || 0) - 1);
+
+        freeThrows.made =
+            Math.max(0, (freeThrows.made || 0) - 1);
+    }
+
+    const periodFreeThrows =
+        liveGameState.teamStatsByPeriod?.[
+            action.period || liveGameState.period
+        ]?.freeThrows;
+
+    if (
+        periodFreeThrows &&
+        typeof periodFreeThrows === "object"
+    ) {
+        periodFreeThrows.attempted =
+            Math.max(
+                0,
+                (periodFreeThrows.attempted || 0) - 1
+            );
+
+        periodFreeThrows.made =
+            Math.max(
+                0,
+                (periodFreeThrows.made || 0) - 1
+            );
+    }
+}
+
         if (action.type === "playerStat") {
             const playerState =
                 liveGameState.playerStatsById[playerId];
@@ -3119,12 +3487,78 @@ if (periodPlayerState) {
         );
 }
         }
+        if (action.statKey === "defensiveRebounds") {
+    liveGameState.teamStats.defensiveRebounds =
+        Math.max(
+            0,
+            (liveGameState.teamStats.defensiveRebounds || 0) - 1
+        );
 
+    const linkedPeriod =
+    action.period || liveGameState.period;
+
+const periodTeamStats =
+    liveGameState.teamStatsByPeriod?.[linkedPeriod];
+
+    if (periodTeamStats) {
+        periodTeamStats.defensiveRebounds =
+            Math.max(
+                0,
+                (periodTeamStats.defensiveRebounds || 0) - 1
+            );
+    }
+}
+
+if (action.statKey === "offensiveRebounds") {
+    liveGameState.teamStats.offensiveRebounds =
+        Math.max(
+            0,
+            (liveGameState.teamStats.offensiveRebounds || 0) - 1
+        );
+
+    const linkedPeriod =
+        action.period || liveGameState.period;
+
+    const periodTeamStats =
+        liveGameState.teamStatsByPeriod?.[linkedPeriod];
+
+    if (periodTeamStats) {
+        periodTeamStats.offensiveRebounds =
+            Math.max(
+                0,
+                (periodTeamStats.offensiveRebounds || 0) - 1
+            );
+    }
+}
+
+if (action.statKey === "turnovers") {
+    liveGameState.teamStats.turnovers =
+        Math.max(
+            0,
+            (liveGameState.teamStats.turnovers || 0) - 1
+        );
+
+    const linkedPeriod =
+        action.period || liveGameState.period;
+
+    const periodTeamStats =
+        liveGameState.teamStatsByPeriod?.[linkedPeriod];
+
+    if (periodTeamStats) {
+        periodTeamStats.turnovers =
+            Math.max(
+                0,
+                (periodTeamStats.turnovers || 0) - 1
+            );
+    }
+}
         liveActionHistory.splice(index, 1);
 
         renderPlayerBench();
         connectPlayerCardButtons();
         renderLastAction();
+renderTeamStatButtons();
+updateLiveTeamPointTotal();
 
         saveLiveGameState();
 
@@ -3203,6 +3637,24 @@ if (periodPlayerState) {
         );
 }
     }
+    if (lastAction.statKey === "defensiveRebounds") {
+    liveGameState.teamStats.defensiveRebounds =
+        Math.max(
+            0,
+            (liveGameState.teamStats.defensiveRebounds || 0) - 1
+        );
+
+    const periodTeamStats =
+        liveGameState.teamStatsByPeriod?.[actionPeriod];
+
+    if (periodTeamStats) {
+        periodTeamStats.defensiveRebounds =
+            Math.max(
+                0,
+                (periodTeamStats.defensiveRebounds || 0) - 1
+            );
+    }
+}
 if (lastAction.type === "transitionPoints") {
     liveGameState.teamStats.transitionPoints =
         Math.max(
