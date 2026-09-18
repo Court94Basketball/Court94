@@ -808,21 +808,66 @@ button {
     font-weight: 700;
 }
 
+.liveGameHeaderControls {
+    margin-left: auto;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    width: 200px;
+}
+
+.liveGameHeaderControls .editGameSetupButton {
+    width: 200px;
+    align-self: center;
+}
+
+.liveGameHeaderControls .periodControl {
+    width: 200px;
+    margin-top: 32px;
+    align-self: center;
+}
+
+.liveGameHeaderControls .periodControl select {
+    width: 200px;
+}
+
+.liveGameHeaderControls .editGameSetupButton {
+    align-self: flex-end;
+}
+
+.liveGameHeaderControls .periodControl {
+    margin-top: 32px;
+    align-self: center;
+}
+
 .periodControl {
     display: grid;
-    gap: 6px;
-    min-width: 95px;
+    gap: 8px;
+    min-width: 160px;
+    font-weight: 900;
+    justify-items: center;
+}
+
+.periodControl {
+    display: grid;
+    gap: 8px;
+    min-width: 160px;
     font-weight: 900;
 }
 
 .periodControl select {
-    min-height: 42px;
+    width: 160px;
+    min-height: 60px;
     border: 0;
-    border-radius: 10px;
-    padding: 7px 10px;
+    border-radius: 12px;
+    padding: 10px 16px;
     background: white;
     color: var(--navy-dark);
+    font-size: 18px;
     font-weight: 900;
+    cursor: pointer;
 }
 
 .trackerTabs {

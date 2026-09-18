@@ -1976,10 +1976,83 @@ if (points === 1) {
     liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.attempted += 1;
     liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.made += 1;
 }   
+
+// Link Player +2 Points to Team Field Goal Make
+if (points === 2) {
+    if (
+        !liveGameState.teamStats.fieldGoals ||
+        typeof liveGameState.teamStats.fieldGoals !== "object"
+    ) {
+        liveGameState.teamStats.fieldGoals = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStats.fieldGoals.attempted += 1;
+    liveGameState.teamStats.fieldGoals.made += 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    if (
+        !liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals ||
+        typeof liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals !== "object"
+    ) {
+        liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.attempted += 1;
+    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
+}
+
+// Link Player +3 Points to Team 3-Point Make
+if (points === 3) {
+    if (
+        !liveGameState.teamStats.threePointers ||
+        typeof liveGameState.teamStats.threePointers !== "object"
+    ) {
+        liveGameState.teamStats.threePointers = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStats.threePointers.attempted += 1;
+    liveGameState.teamStats.threePointers.made += 1;
+
+    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+        liveGameState.teamStatsByPeriod[currentPeriod] = {};
+    }
+
+    if (
+        !liveGameState.teamStatsByPeriod[currentPeriod].threePointers ||
+        typeof liveGameState.teamStatsByPeriod[currentPeriod].threePointers !== "object"
+    ) {
+        liveGameState.teamStatsByPeriod[currentPeriod].threePointers = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    liveGameState.teamStatsByPeriod[currentPeriod].threePointers.attempted += 1;
+    liveGameState.teamStatsByPeriod[currentPeriod].threePointers.made += 1;
+}
+
     liveActionHistory.push({
         type: "playerPoints",
         playerId: player.id,
         amount: points,
+        linkedTeamStat:
+    points === 2
+        ? "fieldGoals"
+        : points === 3
+        ? "threePointers"
+        : null,
         period: liveGameState.period,
         description:
             `#${player.number || "—"} ${player.name} — +${points} Point${
@@ -3458,6 +3531,94 @@ if (periodPlayerState) {
     }
 }
 
+// Undo linked Team 3-Point Field Goal for Player +3
+if (
+    action.type === "playerPoints" &&
+    action.linkedTeamStat === "threePointers"
+) {
+    const threePointers =
+        liveGameState.teamStats.threePointers;
+
+    if (
+        threePointers &&
+        typeof threePointers === "object"
+    ) {
+        threePointers.attempted = Math.max(
+            0,
+            (threePointers.attempted || 0) - 1
+        );
+
+        threePointers.made = Math.max(
+            0,
+            (threePointers.made || 0) - 1
+        );
+    }
+
+    const periodThreePointers =
+        liveGameState.teamStatsByPeriod?.[
+            action.period || liveGameState.period
+        ]?.threePointers;
+
+    if (
+        periodThreePointers &&
+        typeof periodThreePointers === "object"
+    ) {
+        periodThreePointers.attempted = Math.max(
+            0,
+            (periodThreePointers.attempted || 0) - 1
+        );
+
+        periodThreePointers.made = Math.max(
+            0,
+            (periodThreePointers.made || 0) - 1
+        );
+    }
+}
+
+// Undo linked Team Field Goal for Player +2
+if (
+    action.type === "playerPoints" &&
+    action.linkedTeamStat === "fieldGoals"
+) {
+    const fieldGoals =
+        liveGameState.teamStats.fieldGoals;
+
+    if (
+        fieldGoals &&
+        typeof fieldGoals === "object"
+    ) {
+        fieldGoals.attempted = Math.max(
+            0,
+            (fieldGoals.attempted || 0) - 1
+        );
+
+        fieldGoals.made = Math.max(
+            0,
+            (fieldGoals.made || 0) - 1
+        );
+    }
+
+    const periodFieldGoals =
+        liveGameState.teamStatsByPeriod?.[
+            action.period || liveGameState.period
+        ]?.fieldGoals;
+
+    if (
+        periodFieldGoals &&
+        typeof periodFieldGoals === "object"
+    ) {
+        periodFieldGoals.attempted = Math.max(
+            0,
+            (periodFieldGoals.attempted || 0) - 1
+        );
+
+        periodFieldGoals.made = Math.max(
+            0,
+            (periodFieldGoals.made || 0) - 1
+        );
+    }
+}
+
         if (action.type === "playerStat") {
             const playerState =
                 liveGameState.playerStatsById[playerId];
@@ -3568,6 +3729,7 @@ updateLiveTeamPointTotal();
 function undoLastAction() {
     const lastAction =
         liveActionHistory.pop();
+        console.log("UNDO ACTION:", lastAction);
 
     if (!lastAction) {
         return;
@@ -3601,6 +3763,26 @@ if (periodPlayerState) {
             (playerState.points || 0) -
                 lastAction.amount
         );
+      // Undo linked Team Field Goal for Player +2
+if (lastAction.linkedTeamStat === "fieldGoals") {
+    const teamFG = liveGameState.teamStats.fieldGoals;
+
+    if (teamFG && typeof teamFG === "object") {
+        teamFG.made = Math.max(0, (teamFG.made || 0) - 1);
+        teamFG.attempted = Math.max(0, (teamFG.attempted || 0) - 1);
+    }
+
+    const periodFG =
+        liveGameState.teamStatsByPeriod?.[actionPeriod]?.fieldGoals;
+
+    if (periodFG && typeof periodFG === "object") {
+        periodFG.made = Math.max(0, (periodFG.made || 0) - 1);
+        periodFG.attempted = Math.max(
+            0,
+            (periodFG.attempted || 0) - 1
+        );
+    }
+}
     }
 
     if (lastAction.type === "playerStat") {
@@ -4772,11 +4954,13 @@ statKey === "freeThrows"
         };
     });
 
-    const selectedPlayerStats =
-    (team.selectedPlayerStats || [])
-        .filter((statKey) => {
-            return statKey !== "points";
-        });
+    const selectedPlayerStats = [
+    ...new Set([
+        ...(team.selectedPlayerStats || []),
+        "offensiveRebounds",
+        "defensiveRebounds"
+    ])
+].filter((statKey) => statKey !== "points");
 
 const playerSeasonStats =
     team.roster.map((player) => {
