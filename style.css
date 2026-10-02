@@ -2487,3 +2487,8 @@ color: white;
     font-weight: 700;
     color: #64748b;
 }
+
+/* Prevent accidental double-tap zoom throughout the live tracker */
+#liveGameScreen {
+    touch-action: manipulation;
+}

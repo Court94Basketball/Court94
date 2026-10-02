@@ -2012,6 +2012,37 @@ if (points === 2) {
 
 // Link Player +3 Points to Team 3-Point Make
 if (points === 3) {
+
+    // A made 3-pointer also counts as a made field goal
+if (
+    !liveGameState.teamStats.fieldGoals ||
+    typeof liveGameState.teamStats.fieldGoals !== "object"
+) {
+    liveGameState.teamStats.fieldGoals = {
+        made: 0,
+        attempted: 0
+    };
+}
+
+liveGameState.teamStats.fieldGoals.attempted += 1;
+liveGameState.teamStats.fieldGoals.made += 1;
+
+if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
+    liveGameState.teamStatsByPeriod[currentPeriod] = {};
+}
+
+if (
+    !liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals ||
+    typeof liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals !== "object"
+) {
+    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals = {
+        made: 0,
+        attempted: 0
+    };
+}
+
+liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.attempted += 1;
+liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
     if (
         !liveGameState.teamStats.threePointers ||
         typeof liveGameState.teamStats.threePointers !== "object"
@@ -3396,7 +3427,14 @@ function saveCompletedGame() {
         teamScore,
         opponentScore,
         teamStats: liveGameState.teamStats,
-        playerStatsById:
+
+selectedTeamStats:
+    liveGameState.selectedTeamStats,
+
+selectedPlayerStats:
+    liveGameState.selectedPlayerStats,
+
+playerStatsById:
     liveGameState.playerStatsById,
 
 teamStatsByPeriod:
@@ -3532,6 +3570,50 @@ if (periodPlayerState) {
 }
 
 // Undo linked Team 3-Point Field Goal for Player +3
+
+// Also undo the regular Field Goal for the made 3-pointer
+if (
+    action.type === "playerPoints" &&
+    action.linkedTeamStat === "threePointers"
+) {
+    const fieldGoals =
+        liveGameState.teamStats.fieldGoals;
+
+    if (
+        fieldGoals &&
+        typeof fieldGoals === "object"
+    ) {
+        fieldGoals.attempted = Math.max(
+            0,
+            (fieldGoals.attempted || 0) - 1
+        );
+
+        fieldGoals.made = Math.max(
+            0,
+            (fieldGoals.made || 0) - 1
+        );
+    }
+
+    const periodFieldGoals =
+        liveGameState.teamStatsByPeriod?.[
+            action.period || liveGameState.period
+        ]?.fieldGoals;
+
+    if (
+        periodFieldGoals &&
+        typeof periodFieldGoals === "object"
+    ) {
+        periodFieldGoals.attempted = Math.max(
+            0,
+            (periodFieldGoals.attempted || 0) - 1
+        );
+
+        periodFieldGoals.made = Math.max(
+            0,
+            (periodFieldGoals.made || 0) - 1
+        );
+    }
+}
 if (
     action.type === "playerPoints" &&
     action.linkedTeamStat === "threePointers"
@@ -4880,9 +4962,20 @@ if (!teamId || !selectedSeason) {
         .filter(Boolean)
         .join(" — ");
 
-        const selectedTeamStats =
-    team.selectedTeamStats || [];
+        const selectedTeamStats = [
+    ...new Set(
+        teamGames.flatMap((game) => {
+            if (
+                Array.isArray(game.selectedTeamStats) &&
+                game.selectedTeamStats.length > 0
+            ) {
+                return game.selectedTeamStats;
+            }
 
+            return Object.keys(game.teamStats || {});
+        })
+    )
+];
 const teamStatAverages =
     selectedTeamStats.map((statKey) => {
         if (
