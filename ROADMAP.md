@@ -29,6 +29,7 @@
 
 - [ ] **Shot chart.** Suggested by an external coach as a potential differentiator; owner is open to longer-term exploration but has not prioritized building it now.
 - [ ] **Season/stat reporting refinements.** Confirm actual season totals and calculations before proposing expansion.
+- [ ] **Player season stats: show per-game averages by default.** Player season statistics should primarily display per-game averages rather than cumulative totals. Lower priority — after the backup and restore system. Eventually consider a toggle between averages and totals. Before building, verify how "games played" is counted (the current report may count games a player did not play in).
 - [ ] **Demo vs Team Edition behavior.** Audit whether the intended three-completed-game demo limit is implemented and reliable. Avoid changing plans or pricing without approval.
 
 ## Suggested order for the first paid Claude Code session
