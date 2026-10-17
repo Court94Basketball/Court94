@@ -3534,7 +3534,7 @@ if (periodPlayerState) {
 }
         }
 
-        if (action.amount === 1) {
+        if (action.type === "playerPoints" && action.amount === 1) {
     const freeThrows =
         liveGameState.teamStats.freeThrows;
 
