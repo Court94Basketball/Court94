@@ -984,17 +984,64 @@
 </section>
 
         <section id="settingsScreen" class="screen">
-            <div class="emptyState">
-                <h2>Settings</h2>
-                <p>
-                    Court94 preferences will appear here.
-                </p>
+            <div class="sectionHeading">
+                <div>
+                    <h2>Settings</h2>
+                    <p>Manage your Court94 preferences.</p>
+                </div>
             </div>
+
+            <section class="formCard backupCard">
+                <h3>Backup &amp; Restore</h3>
+
+                <p class="formNote backupIntro">
+                    Court94 saves your teams and games only on this device.
+                    Download a backup regularly and keep it somewhere safe,
+                    such as the Files app, iCloud Drive, or email.
+                </p>
+
+                <div class="backupActions">
+                    <button
+                        id="downloadBackupButton"
+                        class="primaryButton"
+                        type="button"
+                    >
+                        Download Backup
+                    </button>
+
+                    <button
+                        id="chooseRestoreFileButton"
+                        class="secondaryButton"
+                        type="button"
+                    >
+                        Restore from Backup
+                    </button>
+
+                    <input
+                        id="restoreBackupInput"
+                        type="file"
+                        hidden
+                    >
+                </div>
+
+                <p
+                    id="backupStatus"
+                    class="backupStatus"
+                    role="status"
+                ></p>
+            </section>
+
+            <section
+                id="restorePanel"
+                class="formCard restorePanel"
+                hidden
+            ></section>
         </section>
 
     </main>
 
     <script src="script.js"></script>
+    <script src="backup.js"></script>
 
 </body>
 </html>

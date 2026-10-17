@@ -2492,3 +2492,105 @@ color: white;
 #liveGameScreen {
     touch-action: manipulation;
 }
+/* BACKUP & RESTORE */
+.backupIntro {
+    margin-top: 0;
+}
+
+.backupActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.backupActions button,
+.restorePanel .formActions button {
+    min-height: 48px;
+    touch-action: manipulation;
+}
+
+.backupStatus {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.backupStatus:empty {
+    display: none;
+}
+
+.restorePanel {
+    margin-top: 18px;
+}
+
+.restorePanel[hidden] {
+    display: none !important;
+}
+
+.restorePanel h4 {
+    margin: 22px 0 8px;
+    color: var(--navy-dark);
+    font-size: 17px;
+}
+
+.restorePanel .formActions {
+    margin-top: 16px;
+}
+
+.restorePanel button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.restoreNote {
+    margin-top: 0;
+}
+
+.restoreList {
+    margin: 0;
+    padding-left: 20px;
+    line-height: 1.6;
+}
+
+.restoreConflict {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.restoreConflict small {
+    color: var(--muted);
+}
+
+.restoreConflict label,
+.restoreCheckbox {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+}
+
+.restoreConflict input,
+.restoreCheckbox input {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    accent-color: var(--navy);
+}
+
+.restoreWarning,
+.restoreError {
+    color: var(--danger);
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.restoreSuccess {
+    color: #027a48;
+    font-weight: 700;
+}
