@@ -5,7 +5,8 @@
 ## First: safety, inspection, and deployment diagnosis
 
 - [ ] **Read-only project audit.** Identify source files, entry points, dependencies, local/dev run method, Git state, storage mechanism, and deployment configuration. Do not edit in the initial review.
-- [ ] **Protect saved teams and games.** Investigate persistence and design a safe backup/export-and-restore strategy. Clearing iPad browser history/site data previously caused teams to disappear. Confirm exactly where and how state is stored before any migration.
+- [x] **Protect saved teams and games.** Investigate persistence and design a safe backup/export-and-restore strategy. Clearing iPad browser history/site data previously caused teams to disappear. Confirm exactly where and how state is stored before any migration.
+  - **Completed October 2026:** Backup & Restore released in Settings (`backup.js`). Coaches can download a backup of teams, rosters, completed games, and the game in progress, and restore it with validation, duplicate prevention, conflict choices, and a required safety backup. Tested on Windows and iPad (Safari, Private Browsing, Home Screen shortcut). Data is still stored only on each device; cloud accounts/sync remain future work.
 - [ ] **Verify public site / 404 issue.** On October 15, 2026, court94.com was showing 404 after a privacy setting had been changed. Determine current hosting/domain/public-access status; do not assume it's still broken.
 - [ ] **Verify deployed version.** Earlier pushes sometimes failed to show recent changes (including SUB IN/SUB OUT UI). Compare actual Git commit, build, and live site before assuming source changes are deployed.
 
