@@ -2556,6 +2556,20 @@ renderLastAction();
 saveLiveGameState();
 }
 
+// A game's own stat choices ("selectedTeamStats" or "selectedPlayerStats"),
+// falling back to the team's defaults for older games that didn't save them.
+function getGameStatKeys(game, team, selectionName) {
+    const gameStatKeys = game?.[selectionName];
+
+    return [
+        ...new Set(
+            Array.isArray(gameStatKeys)
+                ? gameStatKeys
+                : team[selectionName] || []
+        )
+    ];
+}
+
 function renderLiveSummary() {
     const team = getSelectedTeam();
 
@@ -2563,13 +2577,11 @@ function renderLiveSummary() {
         return;
     }
 
-    const uniqueTeamStats = [
-        ...new Set(team.selectedTeamStats || [])
-    ];
+    const uniqueTeamStats =
+        getGameStatKeys(liveGameState, team, "selectedTeamStats");
 
-    const uniquePlayerStats = [
-        ...new Set(team.selectedPlayerStats || [])
-    ];
+    const uniquePlayerStats =
+        getGameStatKeys(liveGameState, team, "selectedPlayerStats");
 
     const periodColumns =
     currentGameSetup.gameFormat === "Halves"
@@ -2888,9 +2900,8 @@ function openGameSummary() {
     document.getElementById("summaryMatchup").textContent =
         `${team.teamName} vs ${liveGameState.opponent}`;
 
-    const uniqueTeamStats = [
-        ...new Set(team.selectedTeamStats || [])
-    ];
+    const uniqueTeamStats =
+        getGameStatKeys(liveGameState, team, "selectedTeamStats");
 
   const teamStatRows =
     uniqueTeamStats
@@ -2931,9 +2942,8 @@ document.getElementById("summaryTeamStats").innerHTML = `
         </table>
     </div>
 `;
-const uniquePlayerStats = [
-    ...new Set(team.selectedPlayerStats || [])
-];
+const uniquePlayerStats =
+    getGameStatKeys(liveGameState, team, "selectedPlayerStats");
     const playerStatColumns = [
     "points",
     ...uniquePlayerStats.filter(
@@ -3076,9 +3086,8 @@ function openSavedGameSummary(gameId) {
     document.getElementById("summaryOpponentScore").value =
         game.opponentScore;
 
-    const uniqueTeamStats = [
-        ...new Set(team.selectedTeamStats || [])
-    ];
+    const uniqueTeamStats =
+        getGameStatKeys(game, team, "selectedTeamStats");
 
     const periodColumns =
     game.gameFormat === "Halves"
@@ -3200,9 +3209,8 @@ document.getElementById(
     </div>
 `;
 
-    const uniquePlayerStats = [
-        ...new Set(team.selectedPlayerStats || [])
-    ];
+    const uniquePlayerStats =
+        getGameStatKeys(game, team, "selectedPlayerStats");
 
    const savedPlayerStatColumns = [
     "points",
