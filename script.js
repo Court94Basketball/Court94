@@ -87,11 +87,13 @@ const playerStats = [
     {
         key: "offensiveRebounds",
         name: "Offensive Rebounds",
+        shortName: "Off Rebs",
         description: "Track individual offensive rebounds."
     },
     {
         key: "defensiveRebounds",
         name: "Defensive Rebounds",
+        shortName: "Def Rebs",
         description: "Track individual defensive rebounds."
     },
     {
@@ -973,22 +975,46 @@ const sortedRoster =
                     "points"
                 );
 
-            const statButtons =
-                uniquePlayerStats
-                    .filter(
-                        (statKey) =>
-                            statKey !== "points"
-                    )
-                    .map((statKey) => {
-                        const stat =
-                            playerStats.find(
-                                (item) =>
-                                    item.key === statKey
-                            );
+            // Card stats always appear in the standard order
+            // (Assists, Steals, Blocks, Fouls, Off Rebs, Def Rebs, Turnovers).
+            const cardStats =
+                playerStats.filter(
+                    (stat) =>
+                        stat.key !== "points" &&
+                        uniquePlayerStats.includes(stat.key)
+                );
 
-                        if (!stat) {
-                            return "";
-                        }
+            // LAYOUT PROTOTYPE: miss buttons are placeholders only.
+            // They are not connected to any stats yet.
+            const missButtons =
+                uniquePlayerStats.includes("points")
+                    ? ["FT Miss", "2PT Miss", "3PT Miss"]
+                          .map((label) => {
+                              return `
+                            <button
+    class="playerCardStatButton playerCardMissButton"
+    type="button"
+>
+    <span>${label}</span>
+
+    <strong>0</strong>
+</button>
+                        `;
+                          })
+                          .join("")
+                    : "";
+
+            const cardButtonCount =
+                (missButtons ? 3 : 0) + cardStats.length;
+
+            // Undo fills the rest of the last row.
+            const undoSpan =
+                3 - (cardButtonCount % 3);
+
+            const statButtons =
+                cardStats
+                    .map((stat) => {
+                        const statKey = stat.key;
 
                         return `
                             <button
@@ -997,7 +1023,7 @@ const sortedRoster =
     data-card-player-stat="${statKey}"
     data-card-player-id="${player.id}"
 >
-    <span>${stat.name}</span>
+    <span>${stat.shortName || stat.name}</span>
 
     <strong>
         ${getPlayerStatTotal(
@@ -1087,16 +1113,17 @@ const sortedRoster =
                     }
 
                     <div class="playerCardStats">
+                        ${missButtons}
                         ${statButtons}
-                    </div>
 
-                    <button
-                        class="playerCardUndoButton"
-                        type="button"
-                        data-card-player-undo="${player.id}"
-                    >
-                        ↶ Undo
-                    </button>
+                        <button
+                            class="playerCardUndoButton undoSpan${undoSpan}"
+                            type="button"
+                            data-card-player-undo="${player.id}"
+                        >
+                            ↶ Undo
+                        </button>
+                    </div>
 
              </article>
 

@@ -2594,3 +2594,48 @@ color: white;
     color: #027a48;
     font-weight: 700;
 }
+
+/* PLAYER CARD LAYOUT PROTOTYPE */
+/* Undo sits inside the stat grid and fills the rest of the last row. */
+.playerCardStats {
+    margin-bottom: 0;
+}
+
+.playerCardStats .undoSpan1 {
+    grid-column: span 1;
+}
+
+.playerCardStats .undoSpan2 {
+    grid-column: span 2;
+}
+
+.playerCardStats .undoSpan3 {
+    grid-column: span 3;
+}
+
+.playerCardStatButton.playerCardMissButton {
+    background: #a9b0bd;
+    color: #172236;
+    touch-action: manipulation;
+}
+
+.playerCardUndoButton {
+    touch-action: manipulation;
+}
+
+/* Keep three columns so the rows line up on every iPad width. */
+@media (max-width: 800px) {
+    .playerCardStats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* Tighter side padding so short labels stay on one line at iPad portrait widths. */
+.playerCardStats .playerCardStatButton {
+    gap: 4px;
+    padding: 10px 8px;
+}
+
+.playerCardStats .playerCardStatButton strong {
+    min-width: 14px;
+}
