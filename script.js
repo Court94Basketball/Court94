@@ -4432,57 +4432,14 @@ const combinedStats = [
 ]
     .filter(Boolean);
 
-        const gameStartersList =
-    document.getElementById("gameStartersList");
-
-gameStartersList.innerHTML = team.roster
-    .map((player) => {
-        return `
-            <label class="gameStarterOption">
-                <input
-                    type="checkbox"
-                    class="gameStarterCheckbox"
-                    data-player-id="${player.id}"
-                    ${
-    editingLiveGameSetup
-        ? (liveGameState.gameStarters || []).includes(player.id)
-            ? "checked"
-            : ""
-        : player.keepAtTop
-            ? "checked"
-            : ""
-}
-                >
-                <span>
-                    #${player.number} ${player.name}
-                </span>
-            </label>
-        `;
-    })
-    .join("");
-
-    const starterCheckboxes =
-    document.querySelectorAll(".gameStarterCheckbox");
-
-function updateStarterCheckboxes() {
-    const checkedCount =
-        document.querySelectorAll(
-            ".gameStarterCheckbox:checked"
-        ).length;
-
-    starterCheckboxes.forEach((checkbox) => {
-        checkbox.disabled =
-            checkedCount >= 5 && !checkbox.checked;
-    });
-}
-
-starterCheckboxes.forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-        updateStarterCheckboxes();
-    });
-});
-
-updateStarterCheckboxes();
+    renderGameStarterChoices(
+        team,
+        editingLiveGameSetup
+            ? liveGameState.gameStarters || []
+            : team.roster
+                  .filter((player) => player.keepAtTop)
+                  .map((player) => player.id)
+    );
 
 editingLiveGameSetup = false;
 
@@ -4498,6 +4455,103 @@ document.getElementById(
 
     showScreen("gameConfirmation");
 }
+
+// The "Starting 5 for This Game" checkboxes, with the given players ticked.
+// Used for a new game and every time Edit Game Setup opens, so the list is
+// never empty (e.g. after a page reload or Backup & Restore).
+function renderGameStarterChoices(team, checkedPlayerIds) {
+    const gameStartersList =
+        document.getElementById("gameStartersList");
+
+    gameStartersList.innerHTML = team.roster
+        .map((player) => {
+            return `
+            <label class="gameStarterOption">
+                <input
+                    type="checkbox"
+                    class="gameStarterCheckbox"
+                    data-player-id="${player.id}"
+                    ${checkedPlayerIds.includes(player.id) ? "checked" : ""}
+                >
+                <span>
+                    #${player.number} ${player.name}
+                </span>
+            </label>
+        `;
+        })
+        .join("");
+
+    const starterCheckboxes =
+        document.querySelectorAll(".gameStarterCheckbox");
+
+    function updateStarterCheckboxes() {
+        const checkedCount =
+            document.querySelectorAll(
+                ".gameStarterCheckbox:checked"
+            ).length;
+
+        starterCheckboxes.forEach((checkbox) => {
+            checkbox.disabled =
+                checkedCount >= 5 && !checkbox.checked;
+        });
+    }
+
+    starterCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+            updateStarterCheckboxes();
+        });
+    });
+
+    updateStarterCheckboxes();
+}
+
+// Opens Edit Game Setup for the game in progress, filled in from the game
+// itself (matchup, stats and the game's existing starters).
+function openLiveGameSetupEditor() {
+    const team = getSelectedTeam();
+
+    if (!team || !liveGameState) {
+        return;
+    }
+
+    editingLiveGameSetup = true;
+
+    document.getElementById(
+        "backToGameSetupButton"
+    ).style.display = "none";
+
+    document.getElementById(
+        "confirmStartGameButton"
+    ).textContent = "CONTINUE GAME";
+
+    currentGameSetup = {
+        ...liveGameState
+    };
+
+    document.getElementById("confirmationTeamName").textContent =
+        [team.schoolName, team.teamName].filter(Boolean).join(" — ") ||
+        team.teamName;
+
+    document.getElementById("confirmationOpponent").textContent =
+        liveGameState.opponent;
+
+    document.getElementById("confirmationGameDetails").textContent =
+        `${liveGameState.gameDate} · ${liveGameState.gameType} · ${liveGameState.location} · ${liveGameState.gameFormat}`;
+
+    renderGameStatChoices(
+        team,
+        liveGameState.selectedTeamStats,
+        liveGameState.selectedPlayerStats
+    );
+
+    renderGameStarterChoices(
+        team,
+        liveGameState.gameStarters || []
+    );
+
+    showScreen("gameConfirmation");
+}
+
 function openTeamDetails(teamId) {
     const team = teams.find(
         (savedTeam) => savedTeam.id === teamId
@@ -6147,39 +6201,7 @@ document
     });
     document
     .getElementById("editGameSetupButton")
-    .addEventListener("click", () => {
-        if (!liveGameState) {
-            return;
-        }
-
-        const team = getSelectedTeam();
-
-        if (!team) {
-            return;
-        }
-
-        editingLiveGameSetup = true;
-
-        document.getElementById(
-    "backToGameSetupButton"
-).style.display = "none";
-
-document.getElementById(
-    "confirmStartGameButton"
-).textContent = "CONTINUE GAME";
-
-        currentGameSetup = {
-            ...liveGameState
-        };
-
-        renderGameStatChoices(
-            team,
-            liveGameState.selectedTeamStats,
-            liveGameState.selectedPlayerStats
-        );
-
-        showScreen("gameConfirmation");
-    });
+    .addEventListener("click", openLiveGameSetupEditor);
 
     document
     .getElementById("playersTabButton")
@@ -6369,30 +6391,7 @@ backButton.addEventListener("click", () => {
     }
 
     if (activeScreen.id === "liveGameScreen") {
-    const team = getSelectedTeam();
-
-    if (!team || !liveGameState) {
-        return;
-    }
-
-    editingLiveGameSetup = true;
-
-    document.getElementById("backToGameSetupButton").style.display = "none";
-
-document.getElementById("confirmStartGameButton").textContent =
-    "CONTINUE GAME";
-
-    currentGameSetup = {
-        ...liveGameState
-    };
-
-    renderGameStatChoices(
-        team,
-        liveGameState.selectedTeamStats,
-        liveGameState.selectedPlayerStats
-    );
-
-    showScreen("gameConfirmation");
+    openLiveGameSetupEditor();
     return;
 }
 
