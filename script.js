@@ -984,20 +984,21 @@ const sortedRoster =
                         uniquePlayerStats.includes(stat.key)
                 );
 
-            // LAYOUT PROTOTYPE: miss buttons are placeholders only.
-            // They are not connected to any stats yet.
+            // Gray miss buttons show each player's misses for that shot type.
             const missButtons =
                 uniquePlayerStats.includes("points")
-                    ? ["FT Miss", "2PT Miss", "3PT Miss"]
-                          .map((label) => {
+                    ? ["ft", "two", "three"]
+                          .map((shotType) => {
                               return `
                             <button
     class="playerCardStatButton playerCardMissButton"
     type="button"
+    data-card-player-miss="${shotType}"
+    data-card-player-id="${player.id}"
 >
-    <span>${label}</span>
+    <span>${shotTypes[shotType].label} Miss</span>
 
-    <strong>0</strong>
+    <strong>${getPlayerMissTotal(player.id, shotType)}</strong>
 </button>
                         `;
                           })
@@ -1180,6 +1181,22 @@ function connectPlayerCardButtons() {
 
                 recordPlayerStat(
                     button.dataset.cardPlayerStat
+                );
+
+                renderPlayerBench();
+                connectPlayerCardButtons();
+            });
+        });
+
+    document
+        .querySelectorAll("[data-card-player-miss]")
+        .forEach((button) => {
+            button.addEventListener("click", () => {
+                selectedLivePlayerId =
+                    button.dataset.cardPlayerId;
+
+                recordPlayerMiss(
+                    button.dataset.cardPlayerMiss
                 );
 
                 renderPlayerBench();
@@ -1940,6 +1957,118 @@ if (
         }
     });
 }
+// Individual shooting. Each shot type lists the player counters it uses
+// and the team shooting stats it also counts toward.
+const shotTypes = {
+    ft: {
+        points: 1,
+        label: "FT",
+        madeKey: "ftMade",
+        attemptedKey: "ftAttempted",
+        teamStatKeys: ["freeThrows"]
+    },
+    two: {
+        points: 2,
+        label: "2PT",
+        madeKey: "twoMade",
+        attemptedKey: "twoAttempted",
+        teamStatKeys: ["fieldGoals"]
+    },
+    three: {
+        points: 3,
+        label: "3PT",
+        madeKey: "threeMade",
+        attemptedKey: "threeAttempted",
+        teamStatKeys: ["fieldGoals", "threePointers"]
+    }
+};
+
+function getShotTypeForPoints(points) {
+    return points === 1 ? "ft" : points === 2 ? "two" : "three";
+}
+
+function adjustCount(stats, statKey, change) {
+    stats[statKey] = Math.max(0, (stats[statKey] || 0) + change);
+}
+
+function adjustShootingStat(stats, statKey, madeChange, attemptedChange) {
+    if (!stats[statKey] || typeof stats[statKey] !== "object") {
+        stats[statKey] = {
+            made: 0,
+            attempted: 0
+        };
+    }
+
+    stats[statKey].made =
+        Math.max(0, (stats[statKey].made || 0) + madeChange);
+
+    stats[statKey].attempted =
+        Math.max(0, (stats[statKey].attempted || 0) + attemptedChange);
+}
+
+// Records (direction 1) or reverses (direction -1) one player shot:
+// the player's points and shooting counters, and the linked team totals,
+// for the whole game and for the period the shot happened in.
+// Team totals update even when a team card isn't shown, so a +3 always
+// counts toward both team FG and team 3PT.
+function applyPlayerShot(playerId, shotType, made, direction, period) {
+    const shot = shotTypes[shotType];
+
+    if (!shot) {
+        return;
+    }
+
+    const madeChange = made ? direction : 0;
+    const attemptedChange = direction;
+
+    if (!liveGameState.playerStatsById[playerId]) {
+        liveGameState.playerStatsById[playerId] = { points: 0 };
+    }
+
+    if (!liveGameState.playerStatsByPeriod[period]) {
+        liveGameState.playerStatsByPeriod[period] = {};
+    }
+
+    if (!liveGameState.playerStatsByPeriod[period][playerId]) {
+        liveGameState.playerStatsByPeriod[period][playerId] = { points: 0 };
+    }
+
+    if (!liveGameState.teamStatsByPeriod[period]) {
+        liveGameState.teamStatsByPeriod[period] = {};
+    }
+
+    [
+        liveGameState.playerStatsById[playerId],
+        liveGameState.playerStatsByPeriod[period][playerId]
+    ].forEach((stats) => {
+        if (made) {
+            adjustCount(stats, "points", shot.points * direction);
+        }
+
+        adjustCount(stats, shot.madeKey, madeChange);
+        adjustCount(stats, shot.attemptedKey, attemptedChange);
+    });
+
+    [
+        liveGameState.teamStats,
+        liveGameState.teamStatsByPeriod[period]
+    ].forEach((stats) => {
+        shot.teamStatKeys.forEach((statKey) => {
+            adjustShootingStat(stats, statKey, madeChange, attemptedChange);
+        });
+    });
+}
+
+function getPlayerMissTotal(playerId, shotType) {
+    const shot = shotTypes[shotType];
+
+    return Math.max(
+        0,
+        getPlayerStatTotal(playerId, shot.attemptedKey) -
+            getPlayerStatTotal(playerId, shot.madeKey)
+    );
+}
+
 function recordPlayerPoints(points) {
     const team = getSelectedTeam();
 
@@ -1952,154 +2081,15 @@ function recordPlayerPoints(points) {
         return;
     }
 
-    const playerState =
-        liveGameState.playerStatsById[
-            selectedLivePlayerId
-        ];
+    const shotType = getShotTypeForPoints(points);
 
-    playerState.points =
-        (playerState.points || 0) + points;
-
-        const currentPeriod =
-    liveGameState.period;
-
-const periodPlayerState =
-    liveGameState.playerStatsByPeriod[
-        currentPeriod
-    ][selectedLivePlayerId];
-
-periodPlayerState.points =
-    (periodPlayerState.points || 0) + points;
-
-    // Link Player +1 Point to Team Free Throw Make
-if (points === 1) {
-    if (
-        !liveGameState.teamStats.freeThrows ||
-        typeof liveGameState.teamStats.freeThrows !== "object"
-    ) {
-        liveGameState.teamStats.freeThrows = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStats.freeThrows.attempted += 1;
-    liveGameState.teamStats.freeThrows.made += 1;
-
-    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
-        liveGameState.teamStatsByPeriod[currentPeriod] = {};
-    }
-
-    if (
-        !liveGameState.teamStatsByPeriod[currentPeriod].freeThrows ||
-        typeof liveGameState.teamStatsByPeriod[currentPeriod].freeThrows !== "object"
-    ) {
-        liveGameState.teamStatsByPeriod[currentPeriod].freeThrows = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.attempted += 1;
-    liveGameState.teamStatsByPeriod[currentPeriod].freeThrows.made += 1;
-}   
-
-// Link Player +2 Points to Team Field Goal Make
-if (points === 2) {
-    if (
-        !liveGameState.teamStats.fieldGoals ||
-        typeof liveGameState.teamStats.fieldGoals !== "object"
-    ) {
-        liveGameState.teamStats.fieldGoals = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStats.fieldGoals.attempted += 1;
-    liveGameState.teamStats.fieldGoals.made += 1;
-
-    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
-        liveGameState.teamStatsByPeriod[currentPeriod] = {};
-    }
-
-    if (
-        !liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals ||
-        typeof liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals !== "object"
-    ) {
-        liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.attempted += 1;
-    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
-}
-
-// Link Player +3 Points to Team 3-Point Make
-if (points === 3) {
-
-    // A made 3-pointer also counts as a made field goal
-if (
-    !liveGameState.teamStats.fieldGoals ||
-    typeof liveGameState.teamStats.fieldGoals !== "object"
-) {
-    liveGameState.teamStats.fieldGoals = {
-        made: 0,
-        attempted: 0
-    };
-}
-
-liveGameState.teamStats.fieldGoals.attempted += 1;
-liveGameState.teamStats.fieldGoals.made += 1;
-
-if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
-    liveGameState.teamStatsByPeriod[currentPeriod] = {};
-}
-
-if (
-    !liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals ||
-    typeof liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals !== "object"
-) {
-    liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals = {
-        made: 0,
-        attempted: 0
-    };
-}
-
-liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.attempted += 1;
-liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
-    if (
-        !liveGameState.teamStats.threePointers ||
-        typeof liveGameState.teamStats.threePointers !== "object"
-    ) {
-        liveGameState.teamStats.threePointers = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStats.threePointers.attempted += 1;
-    liveGameState.teamStats.threePointers.made += 1;
-
-    if (!liveGameState.teamStatsByPeriod[currentPeriod]) {
-        liveGameState.teamStatsByPeriod[currentPeriod] = {};
-    }
-
-    if (
-        !liveGameState.teamStatsByPeriod[currentPeriod].threePointers ||
-        typeof liveGameState.teamStatsByPeriod[currentPeriod].threePointers !== "object"
-    ) {
-        liveGameState.teamStatsByPeriod[currentPeriod].threePointers = {
-            made: 0,
-            attempted: 0
-        };
-    }
-
-    liveGameState.teamStatsByPeriod[currentPeriod].threePointers.attempted += 1;
-    liveGameState.teamStatsByPeriod[currentPeriod].threePointers.made += 1;
-}
+    applyPlayerShot(
+        player.id,
+        shotType,
+        true,
+        1,
+        liveGameState.period
+    );
 
     liveActionHistory.push({
         type: "playerPoints",
@@ -2111,6 +2101,10 @@ liveGameState.teamStatsByPeriod[currentPeriod].fieldGoals.made += 1;
         : points === 3
         ? "threePointers"
         : null,
+        shotType,
+        // Marks entries whose Undo also reverses the player's
+        // shooting counters. Entries from older games don't have it.
+        shotCountersRecorded: true,
         period: liveGameState.period,
         description:
             `#${player.number || "—"} ${player.name} — +${points} Point${
@@ -2125,6 +2119,44 @@ updateLiveTeamPointTotal();
 renderLastAction();
 
 saveLiveGameState();
+}
+
+function recordPlayerMiss(shotType) {
+    const team = getSelectedTeam();
+
+    const player = team.roster.find(
+        (item) =>
+            item.id === selectedLivePlayerId
+    );
+
+    const shot = shotTypes[shotType];
+
+    if (!player || !shot) {
+        return;
+    }
+
+    applyPlayerShot(
+        player.id,
+        shotType,
+        false,
+        1,
+        liveGameState.period
+    );
+
+    liveActionHistory.push({
+        type: "playerMiss",
+        playerId: player.id,
+        shotType,
+        period: liveGameState.period,
+        description:
+            `#${player.number || "—"} ${player.name} — ${shot.label} Miss`
+    });
+
+    renderPlayerStatButtons();
+    renderLastAction();
+    renderTeamStatButtons();
+
+    saveLiveGameState();
 }
 
 function recordPlayerStat(statKey) {
@@ -3535,12 +3567,33 @@ function undoLastPlayerAction(playerId) {
             action.playerId === playerId &&
             (
                 action.type === "playerPoints" ||
-                action.type === "playerStat"
+                action.type === "playerStat" ||
+                action.type === "playerMiss"
             );
 
         if (!isPlayerAction) {
             continue;
         }
+
+        if (
+            action.type === "playerMiss" ||
+            (
+                action.type === "playerPoints" &&
+                action.shotCountersRecorded
+            )
+        ) {
+            // Reverses exactly what applyPlayerShot recorded: the player's
+            // points and shooting counters plus the linked team totals.
+            applyPlayerShot(
+                playerId,
+                action.shotType,
+                action.type === "playerPoints",
+                -1,
+                action.period || liveGameState.period
+            );
+        } else {
+        // Entries recorded before player shooting counters existed
+        // (e.g. a game in progress during the update) use the original Undo.
 
         if (action.type === "playerPoints") {
             const playerState =
@@ -3830,6 +3883,8 @@ if (action.statKey === "turnovers") {
             );
     }
 }
+        }
+
         liveActionHistory.splice(index, 1);
 
         renderPlayerBench();
