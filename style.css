@@ -2664,3 +2664,76 @@ color: white;
     font-size: 13px;
     line-height: 1.4;
 }
+
+/* PLAYER SHOOTING TABLES */
+/* Five columns fit an iPad in portrait, so no minimum width or sideways scroll. */
+.shootingTable {
+    min-width: 0;
+}
+
+.shootingTable th:first-child,
+.shootingTable td:first-child {
+    text-align: left;
+}
+
+.shootingTable th:nth-child(n + 2),
+.shootingTable td:nth-child(n + 2) {
+    text-align: center;
+}
+
+.shotCell span {
+    display: block;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.shotCell small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.unknownShooterRow td {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.coverageBadge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.4px;
+    vertical-align: middle;
+}
+
+.coverageFull {
+    background: #e3f4ea;
+    color: #027a48;
+}
+
+.coveragePartial {
+    background: #fff3d6;
+    color: #8a5a00;
+}
+
+.shootingCoverageNote {
+    margin: 0;
+    padding: 0 18px 14px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.seasonShootingSection .shootingCoverageNote,
+.playerShootingByGameHeading + .shootingCoverageNote {
+    padding: 0 0 10px;
+}
+
+.playerShootingByGameHeading {
+    margin: 22px 0 6px;
+}

@@ -2271,6 +2271,400 @@ function recordUnknownShot(statKey, result) {
     saveLiveGameState();
 }
 
+// ---------- Shooting reports ----------
+
+const shotKeys = [
+    "ftMade",
+    "ftAttempted",
+    "twoMade",
+    "twoAttempted",
+    "threeMade",
+    "threeAttempted"
+];
+
+// Report columns. FG combines 2PT and 3PT.
+const shotReportColumns = [
+    { label: "FT", madeKeys: ["ftMade"], attemptedKeys: ["ftAttempted"] },
+    { label: "2PT", madeKeys: ["twoMade"], attemptedKeys: ["twoAttempted"] },
+    { label: "3PT", madeKeys: ["threeMade"], attemptedKeys: ["threeAttempted"] },
+    {
+        label: "FG",
+        madeKeys: ["twoMade", "threeMade"],
+        attemptedKeys: ["twoAttempted", "threeAttempted"]
+    }
+];
+
+function sumShotKeys(stats, keys) {
+    return keys.reduce(
+        (total, key) => total + (Number(stats?.[key]) || 0),
+        0
+    );
+}
+
+function addShotCounters(total, stats) {
+    shotKeys.forEach((key) => {
+        total[key] = (total[key] || 0) + (Number(stats?.[key]) || 0);
+    });
+
+    return total;
+}
+
+function hasShotAttempts(stats) {
+    return sumShotKeys(stats, ["ftAttempted", "twoAttempted", "threeAttempted"]) > 0;
+}
+
+// A game's team FT / FG / 3PT totals, as FT / 2PT / 3PT counters.
+function getTeamShotCounters(gameTeamStats) {
+    const value = (stat, key) => Number(gameTeamStats?.[stat]?.[key]) || 0;
+
+    return {
+        ftMade: value("freeThrows", "made"),
+        ftAttempted: value("freeThrows", "attempted"),
+        threeMade: value("threePointers", "made"),
+        threeAttempted: value("threePointers", "attempted"),
+        twoMade: Math.max(
+            0,
+            value("fieldGoals", "made") - value("threePointers", "made")
+        ),
+        twoAttempted: Math.max(
+            0,
+            value("fieldGoals", "attempted") - value("threePointers", "attempted")
+        )
+    };
+}
+
+// Splits a game's team shooting into who it's credited to. The team totals
+// are the source of truth; anything not credited to a player or entered with
+// TEAM buttons (e.g. MAKE/MISS while Points was off, or shots from before
+// player shooting was recorded) is "other team entries".
+function getGameShootingBreakdown(game, team) {
+    const rosterOrder = team.roster.map((player) => player.id);
+
+    const playerIds = Object.keys(game.playerStatsById || {}).sort(
+        (a, b) => {
+            const indexA = rosterOrder.indexOf(a);
+            const indexB = rosterOrder.indexOf(b);
+
+            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        }
+    );
+
+    const players = playerIds
+        .map((playerId) => {
+            const player = team.roster.find((item) => item.id === playerId);
+
+            return {
+                label: player
+                    ? `#${player.number || "—"} ${player.name || "Unnamed"}`
+                    : "Former player",
+                stats: game.playerStatsById[playerId]
+            };
+        })
+        .filter((row) => hasShotAttempts(row.stats));
+
+    const playerTotals = playerIds.reduce(
+        (total, playerId) => addShotCounters(total, game.playerStatsById[playerId]),
+        {}
+    );
+
+    const unknown = addShotCounters({}, game.unknownShooterStats);
+    const teamTotals = getTeamShotCounters(game.teamStats);
+    const other = {};
+
+    shotKeys.forEach((key) => {
+        other[key] = Math.max(
+            0,
+            teamTotals[key] - (playerTotals[key] || 0) - (unknown[key] || 0)
+        );
+    });
+
+    return { players, unknown, other, teamTotals };
+}
+
+// "made/attempted", with the percentage underneath when it's meaningful.
+function formatShotCell(stats, column, showPercentage) {
+    const made = sumShotKeys(stats, column.madeKeys);
+    const attempted = sumShotKeys(stats, column.attemptedKeys);
+    const percentage =
+        attempted > 0 ? `${Math.round((made / attempted) * 100)}%` : "—";
+
+    return `
+        <td>
+            <div class="shotCell">
+                <span>${made}/${attempted}</span>
+                ${showPercentage ? `<small>${percentage}</small>` : ""}
+            </div>
+        </td>
+    `;
+}
+
+function renderShotRow(label, stats, showPercentage, rowClass = "") {
+    return `
+        <tr class="${rowClass}">
+            <td class="playerNameCell">${label}</td>
+            ${shotReportColumns
+                .map((column) => formatShotCell(stats, column, showPercentage))
+                .join("")}
+        </tr>
+    `;
+}
+
+function renderShotTableHead(firstLabel) {
+    return `
+        <thead>
+            <tr>
+                <th>${firstLabel}</th>
+                ${shotReportColumns.map((column) => `<th>${column.label}</th>`).join("")}
+            </tr>
+        </thead>
+    `;
+}
+
+// The Player Shooting table for one game (live, end-of-game or saved).
+function renderPlayerShootingSection(game, team) {
+    const coverage = getShootingCoverage(game);
+
+    // Shown whenever shooting was tracked at some point (even if Points was
+    // later turned off); otherwise only a note, and only if Points was tracked.
+    if (
+        coverage === "none" &&
+        !getGameStatKeys(game, team, "selectedPlayerStats").includes("points")
+    ) {
+        return "";
+    }
+
+    if (coverage === "none") {
+        return `
+            <div class="boxScoreWrap playerShootingSection">
+                <h3>Player Shooting</h3>
+                <p class="shootingCoverageNote">
+                    Individual shooting wasn't tracked in this game, so player
+                    attempts and percentages aren't available. Team shooting
+                    totals are in Team Stats.
+                </p>
+            </div>
+        `;
+    }
+
+    const isFull = coverage === "full";
+    const { players, unknown, other, teamTotals } =
+        getGameShootingBreakdown(game, team);
+
+    return `
+        <div class="boxScoreWrap playerShootingSection">
+            <h3>
+                Player Shooting
+                <span class="coverageBadge ${isFull ? "coverageFull" : "coveragePartial"}">
+                    ${isFull ? "Full game" : "Partial"}
+                </span>
+            </h3>
+
+            ${
+                isFull
+                    ? ""
+                    : `<p class="shootingCoverageNote">
+                           Individual shooting was turned on or off during this game,
+                           so player numbers only cover part of it. Player percentages
+                           aren't shown; the team totals are complete.
+                       </p>`
+            }
+
+            <table class="boxScoreTable shootingTable">
+                ${renderShotTableHead("Player")}
+                <tbody>
+                    ${players.map((row) => renderShotRow(row.label, row.stats, isFull)).join("")}
+                    ${
+                        hasShotAttempts(unknown)
+                            ? renderShotRow("Unknown shooter", unknown, isFull, "unknownShooterRow")
+                            : ""
+                    }
+                    ${
+                        hasShotAttempts(other)
+                            ? renderShotRow("Other team entries", other, isFull, "unknownShooterRow")
+                            : ""
+                    }
+                    ${renderShotRow("Team totals", teamTotals, true, "summaryTotalsRow")}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Unknown-shooter points as a Player Scoring row, so the table adds up to the score.
+function renderUnknownScoringRow(game, periodColumns) {
+    const totalPoints = game.unknownShooterStats?.points || 0;
+
+    if (!totalPoints) {
+        return "";
+    }
+
+    return `
+        <tr class="unknownShooterRow">
+            <td class="playerNameCell">Unknown shooter</td>
+            ${periodColumns
+                .map((period) => `<td>${getUnknownPeriodPoints(game, period)}</td>`)
+                .join("")}
+            <td>${totalPoints}</td>
+        </tr>
+    `;
+}
+
+function getUnknownPeriodPoints(game, period) {
+    return game.unknownShooterStatsByPeriod?.[period]?.points || 0;
+}
+
+const coverageLabels = {
+    full: "Full",
+    partial: "Partial",
+    none: "Not tracked"
+};
+
+// Season shooting: total made ÷ total attempted, from full-coverage games only.
+function renderSeasonShootingSection(teamGames, team) {
+    const counts = { full: 0, partial: 0, none: 0 };
+
+    teamGames.forEach((game) => {
+        counts[getShootingCoverage(game)] += 1;
+    });
+
+    if (counts.full === 0 && counts.partial === 0) {
+        return "";
+    }
+
+    const excluded = [
+        counts.partial ? `${counts.partial} partial` : "",
+        counts.none ? `${counts.none} not tracked` : ""
+    ]
+        .filter(Boolean)
+        .join(", ");
+
+    const basis =
+        `Based on ${counts.full} full-coverage game${counts.full === 1 ? "" : "s"} ` +
+        `of ${teamGames.length}.${excluded ? ` Excluded: ${excluded}.` : ""}`;
+
+    if (counts.full === 0) {
+        return `
+            <div class="reportPlayerStats seasonShootingSection">
+                <h4>Player Shooting (Season)</h4>
+                <p class="shootingCoverageNote">
+                    No games with full individual shooting yet, so season shooting
+                    percentages aren't available. ${basis}
+                </p>
+            </div>
+        `;
+    }
+
+    const fullGames = teamGames.filter((game) => getShootingCoverage(game) === "full");
+    const playerTotals = {};
+    const teamTotals = {};
+
+    fullGames.forEach((game) => {
+        Object.entries(game.playerStatsById || {}).forEach(([playerId, stats]) => {
+            playerTotals[playerId] = addShotCounters(playerTotals[playerId] || {}, stats);
+        });
+
+        addShotCounters(teamTotals, getTeamShotCounters(game.teamStats));
+    });
+
+    const creditedToPlayers = Object.values(playerTotals).reduce(
+        (total, stats) => addShotCounters(total, stats),
+        {}
+    );
+
+    const notCredited = {};
+
+    shotKeys.forEach((key) => {
+        notCredited[key] = Math.max(0, (teamTotals[key] || 0) - (creditedToPlayers[key] || 0));
+    });
+
+    const playerRows = team.roster
+        .filter((player) => hasShotAttempts(playerTotals[player.id]))
+        .map((player) =>
+            renderShotRow(
+                `#${player.number || "—"} ${player.name || "Unnamed"}`,
+                playerTotals[player.id],
+                true
+            )
+        )
+        .join("");
+
+    return `
+        <div class="reportPlayerStats seasonShootingSection">
+            <h4>Player Shooting (Season)</h4>
+            <p class="shootingCoverageNote">${basis}</p>
+
+            <div class="reportPlayerTableWrap">
+                <table class="reportPlayerTable shootingTable">
+                    ${renderShotTableHead("Player")}
+                    <tbody>
+                        ${playerRows}
+                        ${
+                            hasShotAttempts(notCredited)
+                                ? renderShotRow("Unknown shooter", notCredited, true, "unknownShooterRow")
+                                : ""
+                        }
+                        ${renderShotRow("Team totals", teamTotals, true, "summaryTotalsRow")}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// One player's shooting, game by game, with each game's coverage.
+function renderPlayerShootingByGame(playerGames, playerId) {
+    const trackedGames = playerGames.filter(
+        (game) => getShootingCoverage(game) !== "none"
+    );
+
+    if (trackedGames.length === 0) {
+        return "";
+    }
+
+    const rows = playerGames
+        .map((game) => {
+            const coverage = getShootingCoverage(game);
+            const stats = game.playerStatsById?.[playerId] || {};
+
+            const cells =
+                coverage === "none"
+                    ? shotReportColumns.map(() => "<td>—</td>").join("")
+                    : shotReportColumns
+                          .map((column) => formatShotCell(stats, column, coverage === "full"))
+                          .join("");
+
+            return `
+                <tr>
+                    <td>${game.gameDate || "—"}</td>
+                    <td>${game.opponent || "—"}</td>
+                    ${cells}
+                    <td>${coverageLabels[coverage]}</td>
+                </tr>
+            `;
+        })
+        .join("");
+
+    return `
+        <h4 class="playerShootingByGameHeading">Shooting by Game</h4>
+        <p class="shootingCoverageNote">
+            Percentages are shown only for games with full individual shooting.
+        </p>
+        <div class="reportPlayerTableWrap">
+            <table class="reportPlayerTable shootingTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Opp</th>
+                        ${shotReportColumns.map((column) => `<th>${column.label}</th>`).join("")}
+                        <th>Tracking</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
 function getPlayerMissTotal(playerId, shotType) {
     const shot = shotTypes[shotType];
 
@@ -3019,7 +3413,7 @@ function renderLiveSummary() {
             ]?.[player.id];
 
         return total + (playerPeriodStats?.points || 0);
-    }, 0);
+    }, 0) + getUnknownPeriodPoints(liveGameState, period);
 });
 
 const playerGameTotal =
@@ -3028,7 +3422,7 @@ const playerGameTotal =
             player.id,
             "points"
         );
-    }, 0);
+    }, 0) + getUnknownShooterPoints();
 
           const playerScoringRows =
     team.roster
@@ -3106,6 +3500,7 @@ const playerGameTotal =
 
        <tbody>
     ${playerScoringRows}
+    ${renderUnknownScoringRow(liveGameState, periodColumns)}
 
     <tr class="summaryTotalsRow">
         <td>Totals</td>
@@ -3154,6 +3549,8 @@ const playerGameTotal =
 </tbody>
         </table>
     </div>
+
+    ${renderPlayerShootingSection(liveGameState, team)}
 `;
 }
 
@@ -3317,6 +3714,8 @@ document.getElementById(
 </tbody>
         </table>
     </div>
+
+    ${renderPlayerShootingSection(liveGameState, team)}
 `;
 document.getElementById(
     "returnToLiveGameButton"
@@ -3560,7 +3959,7 @@ const savedScoringTotals =
                 );
             },
             0
-        );
+        ) + getUnknownPeriodPoints(game, period);
     });
 
 const savedGamePointsTotal =
@@ -3570,7 +3969,7 @@ const savedGamePointsTotal =
                 player.id
             ]?.points || 0
         );
-    }, 0);
+    }, 0) + (game.unknownShooterStats?.points || 0);
 
 const savedPlayerRows =
     team.roster
@@ -3644,6 +4043,7 @@ document.getElementById(
 
             <tbody>
                 ${savedPlayerScoringRows}
+                ${renderUnknownScoringRow(game, periodColumns)}
 
                 <tr class="summaryTotalsRow">
                     <td>Totals</td>
@@ -3692,6 +4092,8 @@ document.getElementById(
             </tbody>
         </table>
     </div>
+
+    ${renderPlayerShootingSection(game, team)}
 `;
 document.getElementById(
     "returnToLiveGameButton"
@@ -5708,6 +6110,8 @@ ${selectedPlayerStats
                         </div>
         </div>
 
+        ${renderSeasonShootingSection(teamGames, team)}
+
         <div class="reportPlayerGameDetail">
     <div class="reportPlayerGameHeader">
         <h4>Player Game-by-Game</h4>
@@ -6021,6 +6425,8 @@ ${playerStats
                 </tbody>
             </table>
         </div>
+
+        ${renderPlayerShootingByGame(playerGames, playerId)}
     `;
 }
 
