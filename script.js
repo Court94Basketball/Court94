@@ -65,6 +65,11 @@ const playerStats = [
         description: "Track player scoring."
     },
     {
+        key: "individualShooting",
+        name: "Individual Shooting Stats",
+        description: "Adds FT, 2PT and 3PT Miss buttons to player cards. Turns on Points."
+    },
+    {
         key: "assists",
         name: "Assists",
         description: "Track passes that directly create baskets."
@@ -102,6 +107,32 @@ const playerStats = [
         description: "Track individual player turnovers."
     }
 ];
+
+// Player-stat choices that switch a feature on instead of adding a counter.
+const playerStatSettings = ["individualShooting"];
+
+// True for player stats that get their own button and summary column
+// (not Points, which uses +1/+2/+3, and not settings).
+function isPlayerCounterStat(statKey) {
+    return (
+        statKey !== "points" &&
+        !playerStatSettings.includes(statKey)
+    );
+}
+
+// Individual Shooting Stats needs Points.
+function normalizePlayerStatSelection(statKeys) {
+    return statKeys.includes("points")
+        ? statKeys
+        : statKeys.filter((statKey) => statKey !== "individualShooting");
+}
+
+function hasIndividualShooting(statKeys) {
+    return (
+        statKeys.includes("points") &&
+        statKeys.includes("individualShooting")
+    );
+}
 
 let teams = loadTeams();
 let savedGames = loadGames();
@@ -552,9 +583,11 @@ function saveTeamFromForm(event) {
         "teamStat"
     );
 
-    const selectedPlayerStats = collectSelectedStats(
-        "[data-player-stat]",
-        "playerStat"
+    const selectedPlayerStats = normalizePlayerStatSelection(
+        collectSelectedStats(
+            "[data-player-stat]",
+            "playerStat"
+        )
     );
 
     if (
@@ -638,6 +671,10 @@ function createEmptyStatObject(statKeys) {
     const statObject = {};
 
     statKeys.forEach((statKey) => {
+        if (playerStatSettings.includes(statKey)) {
+            return;
+        }
+
         if (
     statKey === "fieldGoals" ||
     statKey === "threePointers" ||
@@ -685,12 +722,14 @@ function saveLiveGameSetupChanges() {
         (checkbox) => checkbox.dataset.gameTeamStat
     );
 
-    const selectedGamePlayerStats = Array.from(
-        document.querySelectorAll(
-            "[data-game-player-stat]:checked"
+    const selectedGamePlayerStats = normalizePlayerStatSelection(
+        Array.from(
+            document.querySelectorAll(
+                "[data-game-player-stat]:checked"
+            )
+        ).map(
+            (checkbox) => checkbox.dataset.gamePlayerStat
         )
-    ).map(
-        (checkbox) => checkbox.dataset.gamePlayerStat
     );
 
     liveGameState.gameStarters = gameStarters;
@@ -808,12 +847,14 @@ if (gameStarters.length !== 5) {
     (checkbox) => checkbox.dataset.gameTeamStat
 );
 
-const selectedGamePlayerStats = Array.from(
-    document.querySelectorAll(
-        "[data-game-player-stat]:checked"
+const selectedGamePlayerStats = normalizePlayerStatSelection(
+    Array.from(
+        document.querySelectorAll(
+            "[data-game-player-stat]:checked"
+        )
+    ).map(
+        (checkbox) => checkbox.dataset.gamePlayerStat
     )
-).map(
-    (checkbox) => checkbox.dataset.gamePlayerStat
 );
 
     const playerStatsById = {};
@@ -980,13 +1021,13 @@ const sortedRoster =
             const cardStats =
                 playerStats.filter(
                     (stat) =>
-                        stat.key !== "points" &&
+                        isPlayerCounterStat(stat.key) &&
                         uniquePlayerStats.includes(stat.key)
                 );
 
             // Gray miss buttons show each player's misses for that shot type.
             const missButtons =
-                uniquePlayerStats.includes("points")
+                hasIndividualShooting(uniquePlayerStats)
                     ? ["ft", "two", "three"]
                           .map((shotType) => {
                               return `
@@ -1460,7 +1501,7 @@ function renderPlayerStatButtons() {
     }
 
     uniquePlayerStats
-        .filter((statKey) => statKey !== "points")
+        .filter((statKey) => isPlayerCounterStat(statKey))
         .forEach((statKey) => {
             const stat = playerStats.find(
                 (item) => item.key === statKey
@@ -2171,7 +2212,7 @@ function recordPlayerStat(statKey) {
         (item) => item.key === statKey
     );
 
-    if (!player || !stat) {
+    if (!player || !stat || !isPlayerCounterStat(statKey)) {
         return;
     }
 
@@ -2713,7 +2754,7 @@ function renderLiveSummary() {
     const playerStatColumns = [
         "points",
         ...uniquePlayerStats.filter(
-            (statKey) => statKey !== "points"
+            (statKey) => isPlayerCounterStat(statKey)
         )
     ];
 
@@ -2979,7 +3020,7 @@ const uniquePlayerStats =
     const playerStatColumns = [
     "points",
     ...uniquePlayerStats.filter(
-        (statKey) => statKey !== "points"
+        (statKey) => isPlayerCounterStat(statKey)
     )
 ];
 
@@ -3247,7 +3288,7 @@ document.getElementById(
    const savedPlayerStatColumns = [
     "points",
     ...uniquePlayerStats.filter(
-        (statKey) => statKey !== "points"
+        (statKey) => isPlayerCounterStat(statKey)
     )
 ];
 
@@ -5143,7 +5184,7 @@ statKey === "freeThrows"
         "offensiveRebounds",
         "defensiveRebounds"
     ])
-].filter((statKey) => statKey !== "points");
+].filter((statKey) => isPlayerCounterStat(statKey));
 
 const playerSeasonStats =
     team.roster.map((player) => {
@@ -5614,7 +5655,7 @@ const teamId =
     const playerStats =
         (team.selectedPlayerStats || [])
             .filter((statKey) => {
-                return statKey !== "points";
+                return isPlayerCounterStat(statKey);
             });
 
     const playerGames =
@@ -6176,6 +6217,48 @@ if (activeScreen.id === "newGameScreen") {
         showScreen("home");
     }
 });
+
+// Individual Shooting Stats needs Points: ticking it ticks Points, and
+// unticking Points unticks it. One listener per checkbox area (Team Setup,
+// and Game Setup / Edit Game Setup), so re-rendering never stacks them.
+function connectShootingChoice(containerId, attributeName) {
+    const container = document.getElementById(containerId);
+
+    if (!container) {
+        return;
+    }
+
+    container.addEventListener("change", (event) => {
+        const statKey = event.target.getAttribute(attributeName);
+
+        const pointsCheckbox = container.querySelector(
+            `[${attributeName}="points"]`
+        );
+
+        const shootingCheckbox = container.querySelector(
+            `[${attributeName}="individualShooting"]`
+        );
+
+        if (
+            statKey === "individualShooting" &&
+            event.target.checked &&
+            pointsCheckbox
+        ) {
+            pointsCheckbox.checked = true;
+        }
+
+        if (
+            statKey === "points" &&
+            !event.target.checked &&
+            shootingCheckbox
+        ) {
+            shootingCheckbox.checked = false;
+        }
+    });
+}
+
+connectShootingChoice("playerStatChoices", "data-player-stat");
+connectShootingChoice("gamePlayerStatChoices", "data-game-player-stat");
 
 renderStatChoices();
 renderTeams();
