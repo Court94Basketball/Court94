@@ -134,6 +134,32 @@ function hasIndividualShooting(statKeys) {
     );
 }
 
+// Individual shooting coverage for a game in progress or a saved game:
+// "full"    — on from the start and never turned off,
+// "partial" — on for only part of the game,
+// "none"    — never on.
+// It's stored on the game itself (shootingCoverage), not as a player stat.
+// Games started before coverage was recorded never count as "full".
+function getShootingCoverage(game) {
+    if (["full", "partial", "none"].includes(game?.shootingCoverage)) {
+        return game.shootingCoverage;
+    }
+
+    return hasIndividualShooting(game?.selectedPlayerStats || [])
+        ? "partial"
+        : "none";
+}
+
+// Coverage after Edit Game Setup changes the player stats mid-game.
+// Any change to the setting makes the game partial, permanently.
+function getNextShootingCoverage(game, newStatKeys) {
+    const settingChanged =
+        hasIndividualShooting(game.selectedPlayerStats || []) !==
+        hasIndividualShooting(newStatKeys);
+
+    return settingChanged ? "partial" : getShootingCoverage(game);
+}
+
 let teams = loadTeams();
 let savedGames = loadGames();
 let editingTeamId = null;
@@ -733,6 +759,14 @@ function saveLiveGameSetupChanges() {
     );
 
     liveGameState.gameStarters = gameStarters;
+
+    // Must be worked out before the new player stats replace the old ones.
+    liveGameState.shootingCoverage =
+        getNextShootingCoverage(
+            liveGameState,
+            selectedGamePlayerStats
+        );
+
     liveGameState.selectedTeamStats =
         selectedGameTeamStats;
     liveGameState.selectedPlayerStats =
@@ -883,6 +917,11 @@ playerDisplayOrder: [
         selectedTeamStats: selectedGameTeamStats,
 selectedPlayerStats: selectedGamePlayerStats,
 
+        shootingCoverage:
+            hasIndividualShooting(selectedGamePlayerStats)
+                ? "full"
+                : "none",
+
         teamStats:
             createEmptyStatObject(
                 selectedGameTeamStats
@@ -922,6 +961,11 @@ team.roster.forEach((player) => {
 });
 
     renderLiveGame();
+
+    // Save right away so the new game (and its coverage) survives a refresh
+    // even before the first stat is recorded.
+    saveLiveGameState();
+
     showScreen("liveGame");
 }
 
@@ -3713,6 +3757,9 @@ unknownShooterStats:
 
 unknownShooterStatsByPeriod:
     liveGameState.unknownShooterStatsByPeriod || {},
+
+shootingCoverage:
+    getShootingCoverage(liveGameState),
         completedAt: new Date().toISOString()
     };
 
