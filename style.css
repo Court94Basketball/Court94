@@ -2639,3 +2639,28 @@ color: white;
 .playerCardStats .playerCardStatButton strong {
     min-width: 14px;
 }
+
+/* TEAM SHOOTING BUTTONS FOR UNKNOWN SHOOTERS */
+/* A small "TEAM" tag above the main label keeps the buttons the same height. */
+.teamStatCardControls button .teamShotTag {
+    display: block;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    line-height: 1.1;
+    opacity: 0.85;
+}
+
+.teamStatCardControls button .teamShotTag + span {
+    display: block;
+    font-size: 17px;
+    line-height: 1.1;
+}
+
+.teamShotReminder {
+    grid-column: 1 / -1;
+    margin: -4px 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+}

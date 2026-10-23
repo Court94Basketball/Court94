@@ -1183,6 +1183,7 @@ function updateLiveTeamPointTotal() {
         return;
     }
 
+    // Player points plus points from unknown shooters (TEAM +1/+2/+3).
     const totalPoints =
         Object.values(
             liveGameState.playerStatsById || {}
@@ -1190,7 +1191,7 @@ function updateLiveTeamPointTotal() {
             (sum, playerStats) =>
                 sum + (playerStats.points || 0),
             0
-        );
+        ) + getUnknownShooterPoints();
 
     totalElement.textContent = totalPoints;
 }
@@ -1729,7 +1730,7 @@ ${percentage}%
                         class="teamStatMinusButton"
                         data-field-goal-result="miss"
                     >
-                        MISS
+                        ${teamShotButtonLabel("miss", "fieldGoals")}
                     </button>
 
                     <button
@@ -1745,7 +1746,7 @@ ${percentage}%
                         class="teamStatPlusButton"
                         data-field-goal-result="make"
                     >
-                        MAKE
+                        ${teamShotButtonLabel("make", "fieldGoals")}
                     </button>
                 </div>
             </div>
@@ -1787,7 +1788,7 @@ const threePointerCard = hasThreePointers
                         class="teamStatMinusButton"
                         data-three-pointer-result="miss"
                     >
-                        MISS
+                        ${teamShotButtonLabel("miss", "threePointers")}
                     </button>
 
                     <button
@@ -1803,7 +1804,7 @@ const threePointerCard = hasThreePointers
                         class="teamStatPlusButton"
                         data-three-pointer-result="make"
                     >
-                        MAKE
+                        ${teamShotButtonLabel("make", "threePointers")}
                     </button>
                 </div>
             </div>
@@ -1845,7 +1846,7 @@ ${percentage}%
                         class="teamStatMinusButton"
                         data-free-throw-result="miss"
                     >
-                        MISS
+                        ${teamShotButtonLabel("miss", "freeThrows")}
                     </button>
 
                     <button
@@ -1861,7 +1862,7 @@ ${percentage}%
                         class="teamStatPlusButton"
                         data-free-throw-result="make"
                     >
-                        MAKE
+                        ${teamShotButtonLabel("make", "freeThrows")}
                     </button>
                 </div>
             </div>
@@ -1869,7 +1870,14 @@ ${percentage}%
     })()
     : "";
 
+    const teamShotReminder =
+        isTrackingPlayerPoints() &&
+        (hasFieldGoals || hasThreePointers || hasFreeThrows)
+            ? `<p class="teamShotReminder">TEAM shooting buttons are only for unknown shooters. Use the player's buttons when you know who shot.</p>`
+            : "";
+
     container.innerHTML = `
+        ${teamShotReminder}
         <div class="teamStatCardGrid">
     ${regularCards}
 ${fieldGoalCard}
@@ -2074,10 +2082,6 @@ function applyPlayerShot(playerId, shotType, made, direction, period) {
         liveGameState.playerStatsByPeriod[period][playerId] = { points: 0 };
     }
 
-    if (!liveGameState.teamStatsByPeriod[period]) {
-        liveGameState.teamStatsByPeriod[period] = {};
-    }
-
     [
         liveGameState.playerStatsById[playerId],
         liveGameState.playerStatsByPeriod[period][playerId]
@@ -2090,6 +2094,17 @@ function applyPlayerShot(playerId, shotType, made, direction, period) {
         adjustCount(stats, shot.attemptedKey, attemptedChange);
     });
 
+    applyTeamShotTotals(shotType, madeChange, attemptedChange, period);
+}
+
+// The team shooting totals a shot counts toward, for the game and its period.
+function applyTeamShotTotals(shotType, madeChange, attemptedChange, period) {
+    const shot = shotTypes[shotType];
+
+    if (!liveGameState.teamStatsByPeriod[period]) {
+        liveGameState.teamStatsByPeriod[period] = {};
+    }
+
     [
         liveGameState.teamStats,
         liveGameState.teamStatsByPeriod[period]
@@ -2098,6 +2113,118 @@ function applyPlayerShot(playerId, shotType, made, direction, period) {
             adjustShootingStat(stats, statKey, madeChange, attemptedChange);
         });
     });
+}
+
+// ---------- Unknown shooters (team shooting cards when Points is tracked) ----------
+
+// Which shot each team shooting card records for an unknown shooter.
+// The FG card is always a two-point basket; 3-pointers use the 3PT card.
+const teamShotTypeByStat = {
+    freeThrows: "ft",
+    fieldGoals: "two",
+    threePointers: "three"
+};
+
+function isTrackingPlayerPoints() {
+    const team = getSelectedTeam();
+
+    return Boolean(
+        liveGameState &&
+        team &&
+        getGameStatKeys(liveGameState, team, "selectedPlayerStats")
+            .includes("points")
+    );
+}
+
+function teamShotButtonLabel(result, statKey) {
+    if (!isTrackingPlayerPoints()) {
+        return result === "make" ? "MAKE" : "MISS";
+    }
+
+    const mainLabel =
+        result === "make"
+            ? `+${shotTypes[teamShotTypeByStat[statKey]].points}`
+            : "MISS";
+
+    // The space keeps "TEAM MISS" as two words for screen readers;
+    // both parts are block-level, so it doesn't change the layout.
+    return `<small class="teamShotTag">TEAM</small> <span>${mainLabel}</span>`;
+}
+
+function getUnknownShooterPoints() {
+    return liveGameState?.unknownShooterStats?.points || 0;
+}
+
+// Records (direction 1) or reverses (direction -1) an unknown shooter's shot:
+// the team totals, the unknown-shooter tally and, for a make, the score.
+function applyUnknownShot(shotType, made, direction, period) {
+    const shot = shotTypes[shotType];
+
+    if (!shot) {
+        return;
+    }
+
+    const madeChange = made ? direction : 0;
+
+    if (!liveGameState.unknownShooterStats) {
+        liveGameState.unknownShooterStats = {};
+    }
+
+    if (!liveGameState.unknownShooterStatsByPeriod) {
+        liveGameState.unknownShooterStatsByPeriod = {};
+    }
+
+    if (!liveGameState.unknownShooterStatsByPeriod[period]) {
+        liveGameState.unknownShooterStatsByPeriod[period] = {};
+    }
+
+    [
+        liveGameState.unknownShooterStats,
+        liveGameState.unknownShooterStatsByPeriod[period]
+    ].forEach((stats) => {
+        if (made) {
+            adjustCount(stats, "points", shot.points * direction);
+        }
+
+        adjustCount(stats, shot.madeKey, madeChange);
+        adjustCount(stats, shot.attemptedKey, direction);
+    });
+
+    applyTeamShotTotals(shotType, madeChange, direction, period);
+}
+
+function recordUnknownShot(statKey, result) {
+    const shotType = teamShotTypeByStat[statKey];
+    const shot = shotTypes[shotType];
+
+    if (!shot) {
+        return;
+    }
+
+    applyUnknownShot(
+        shotType,
+        result === "make",
+        1,
+        liveGameState.period
+    );
+
+    liveActionHistory.push({
+        type: "unknownShot",
+        statKey,
+        shotType,
+        result,
+        period: liveGameState.period,
+        description:
+            result === "make"
+                ? `Unknown shooter — TEAM +${shot.points}`
+                : `Unknown shooter — TEAM ${shot.label} Miss`
+    });
+
+    renderTeamStatButtons();
+    renderLastAction();
+    updateLiveTeamPointTotal();
+
+    saveLiveGameState();
 }
 
 function getPlayerMissTotal(playerId, shotType) {
@@ -2306,6 +2433,13 @@ function recordShootingResult(statKey, result) {
         return;
     }
 
+    // With Points tracked, team-card shots belong to an unknown shooter.
+    // Without Points, MAKE/MISS work exactly as before.
+    if (isTrackingPlayerPoints()) {
+        recordUnknownShot(statKey, result);
+        return;
+    }
+
     if (
         !liveGameState.teamStats[statKey] ||
         typeof liveGameState.teamStats[statKey] !== "object"
@@ -2427,7 +2561,10 @@ function undoShootingResult(statKey) {
         const action = liveActionHistory[i];
 
         if (
-            action.type === "shootingStat" &&
+            (
+                action.type === "shootingStat" ||
+                action.type === "unknownShot"
+            ) &&
             action.statKey === statKey
         ) {
             actionIndex = i;
@@ -2440,6 +2577,24 @@ function undoShootingResult(statKey) {
     }
 
     const action = liveActionHistory[actionIndex];
+
+    if (action.type === "unknownShot") {
+        applyUnknownShot(
+            action.shotType,
+            action.result === "make",
+            -1,
+            action.period || liveGameState.period
+        );
+
+        liveActionHistory.splice(actionIndex, 1);
+
+        renderTeamStatButtons();
+        renderLastAction();
+        updateLiveTeamPointTotal();
+
+        saveLiveGameState();
+        return;
+    }
 
     const shootingStat =
         liveGameState.teamStats[statKey];
@@ -2525,6 +2680,8 @@ function undoShootingResult(statKey) {
 
     renderTeamStatButtons();
     renderLastAction();
+
+    saveLiveGameState();
 }
 
 function recordTeamStat(statKey, amount = 1) {
@@ -2967,7 +3124,7 @@ function openGameSummary() {
         liveGameState.playerStatsById || {}
     ).reduce((total, playerStats) => {
         return total + (playerStats.points || 0);
-    }, 0);
+    }, 0) + getUnknownShooterPoints();
     viewingSavedGame = false;
 
     document.getElementById("summaryMatchup").textContent =
@@ -3550,6 +3707,12 @@ teamStatsByPeriod:
 
 playerStatsByPeriod:
     liveGameState.playerStatsByPeriod,
+
+unknownShooterStats:
+    liveGameState.unknownShooterStats || {},
+
+unknownShooterStatsByPeriod:
+    liveGameState.unknownShooterStatsByPeriod || {},
         completedAt: new Date().toISOString()
     };
 
