@@ -30,7 +30,17 @@
 
 - [ ] **Shot chart.** Suggested by an external coach as a potential differentiator; owner is open to longer-term exploration but has not prioritized building it now.
 - [ ] **Season/stat reporting refinements.** Confirm actual season totals and calculations before proposing expansion.
-- [ ] **Player season stats: show per-game averages by default.** Player season statistics should primarily display per-game averages rather than cumulative totals. Lower priority — after the backup and restore system. Eventually consider a toggle between averages and totals. Before building, verify how "games played" is counted (the current report may count games a player did not play in).
+- [ ] **Season statistics: per-game averages plus season point totals.** Player season statistics should primarily display per-game averages for counting statistics, while also prominently displaying each player's total season points. Shooting percentages must continue to use total makes divided by total attempts, based only on Full-coverage games (never an average of game percentages). Eventually consider a toggle between averages and totals. Before building, verify how "games played" is counted (the current report may count games a player did not play in).
+- [ ] **Returning players and varsity career points (optional feature).**
+  - Give players persistent identities across seasons.
+  - When a coach adds a returning player, suggest possible matches and ask for confirmation rather than relying on names alone.
+  - Allow a player to change jersey numbers between seasons.
+  - Track varsity career points across multiple seasons, separately from JV statistics.
+  - Allow coaches to enter verified previous varsity points as an opening balance.
+  - Display progress toward 1,000- and 2,000-point milestones.
+  - Keep this feature optional.
+  - Treat the official scorebook as authoritative.
+  - Consider future Excel import of previous season totals.
 - [ ] **Demo vs Team Edition behavior.** Audit whether the intended three-completed-game demo limit is implemented and reliable. Avoid changing plans or pricing without approval.
 
 ## Suggested order for the first paid Claude Code session
