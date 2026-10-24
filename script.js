@@ -873,6 +873,10 @@ if (gameStarters.length !== 5) {
 
     liveActionHistory = [];
 
+    // Unfinished SUB OUT / SUB IN taps belong to the previous game.
+    pendingSubOutPlayerIds = [];
+    pendingSubInPlayerIds = [];
+
     const selectedGameTeamStats = Array.from(
     document.querySelectorAll(
         "[data-game-team-stat]:checked"
@@ -5555,7 +5559,9 @@ document
         selectedTeamId = selectedGamesTeamId;
         updateAppTeamBadge();
 
-        showScreen("newGame");
+        // Same fresh form as starting from the team page: blank opponent,
+        // today's date (not the previous game's).
+        openNewGameScreen();
     });
 
     function renderReportsTeamFilter() {
