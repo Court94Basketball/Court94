@@ -962,11 +962,35 @@ team.roster.forEach((player) => {
 
     renderLiveGame();
 
+    // Every new game opens on TRACK, and the (hidden) Summary is rebuilt for
+    // this game so nothing from the previous game can show.
+    showTrackTab();
+    renderLiveSummary();
+
     // Save right away so the new game (and its coverage) survives a refresh
     // even before the first stat is recorded.
     saveLiveGameState();
 
     showScreen("liveGame");
+}
+
+// Shows the TRACK tab (player and team buttons) on the live game screen.
+function showTrackTab() {
+    document
+        .getElementById("playersTabButton")
+        .classList.add("activeTrackerTab");
+
+    document
+        .getElementById("summaryTabButton")
+        .classList.remove("activeTrackerTab");
+
+    document
+        .getElementById("playerTrackerPanel")
+        .classList.add("activeTrackerPanel");
+
+    document
+        .getElementById("summaryTrackerPanel")
+        .classList.remove("activeTrackerPanel");
 }
 
 function renderLiveGame() {
@@ -3728,9 +3752,11 @@ document.getElementById(
     "summaryTeamScore"
 ).value = calculatedTeamScore;
 
+// Left empty so the faded "0" placeholder shows and the coach can type the
+// score straight away. A typed 0 is still a valid score.
 document.getElementById(
     "summaryOpponentScore"
-).value = 0;
+).value = "";
 
     showScreen("gameSummary");
 }
@@ -6611,24 +6637,7 @@ document
 
     document
     .getElementById("playersTabButton")
-    .addEventListener("click", () => {
-        document
-            .getElementById("playersTabButton")
-            .classList.add("activeTrackerTab");
-
-            document
-    .getElementById("summaryTabButton")
-    .classList.remove("activeTrackerTab");
-
-        document
-            .getElementById("playerTrackerPanel")
-            .classList.add("activeTrackerPanel");
-
-            document
-    .getElementById("summaryTrackerPanel")
-    .classList.remove("activeTrackerPanel");
-
-    });
+    .addEventListener("click", showTrackTab);
 
     document
     .getElementById("summaryTabButton")
