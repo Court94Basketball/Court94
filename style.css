@@ -2737,3 +2737,129 @@ color: white;
 .playerShootingByGameHeading {
     margin: 22px 0 6px;
 }
+
+/* PLAYER SEASON STATS (averages / totals) */
+.seasonPlayerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.seasonPlayerHeader h4 {
+    margin-bottom: 0;
+}
+
+.seasonViewSwitch {
+    display: inline-flex;
+    border: 2px solid var(--navy);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.seasonViewSwitch button {
+    min-height: 44px;
+    min-width: 96px;
+    padding: 0 16px;
+    border: 0;
+    background: white;
+    color: var(--navy);
+    font-size: 15px;
+    font-weight: 900;
+    touch-action: manipulation;
+}
+
+.seasonPlayerSection[data-view="averages"] [data-season-view="averages"],
+.seasonPlayerSection[data-view="totals"] [data-season-view="totals"] {
+    background: var(--navy);
+    color: white;
+}
+
+.seasonPlayerSection[data-view="averages"] .seasonTableTotals,
+.seasonPlayerSection[data-view="totals"] .seasonTableAverages {
+    display: none;
+}
+
+.seasonNote {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.seasonPlayerSection > .seasonNote {
+    padding: 10px 0 0;
+}
+
+.seasonLimitationNote {
+    font-style: italic;
+}
+
+.seasonPlayerSection .reportPlayerTableWrap {
+    margin-top: 12px;
+}
+
+/* Tighter cells so all columns fit an iPad in portrait. */
+.seasonPlayerTable th,
+.seasonPlayerTable td {
+    padding: 10px 6px;
+}
+
+.seasonPlayerTable th:nth-child(2),
+.seasonPlayerTable td:nth-child(2) {
+    text-align: center;
+}
+
+.seasonPlayerTable td.seasonPlayerName,
+.seasonPlayerTable th:first-child {
+    min-width: 120px;
+    text-align: left;
+    white-space: normal;
+}
+
+.seasonPlayerTable td.seasonPlayerName {
+    font-weight: 800;
+}
+
+/* Season points and points per game stand out in both views. */
+.seasonPlayerTable th:nth-child(3),
+.seasonPlayerTable th:nth-child(4),
+.seasonPlayerTable td.seasonPoints {
+    background: #fff8dc;
+}
+
+.seasonPlayerTable td.seasonPoints {
+    font-size: 17px;
+    font-weight: 900;
+}
+
+.reportAverageGames {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* Player Game-by-Game: games the player didn't play */
+.dnpRow td {
+    color: var(--muted);
+}
+
+.dnpRow td[colspan] {
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-align: center;
+}
+
+.playerDnpNote {
+    padding-top: 10px;
+}
+
+/* Tighter cells for the wide report tables (Player Game-by-Game,
+   Game-by-Game Team Trends) so they fit an iPad in portrait. */
+.compactReportTable th,
+.compactReportTable td {
+    padding: 10px 6px;
+}

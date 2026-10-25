@@ -926,6 +926,10 @@ selectedPlayerStats: selectedGamePlayerStats,
                 ? "full"
                 : "none",
 
+        // Players who came in as substitutes (starters are in gameStarters).
+        subbedInPlayerIds: [],
+        participationTracked: true,
+
         teamStats:
             createEmptyStatObject(
                 selectedGameTeamStats
@@ -1391,6 +1395,9 @@ function connectPlayerCardButtons() {
                         liveGameState.currentFive[
                             currentFiveIndex
                         ] = incomingDisplayId;
+
+                        // A completed substitution: this player played.
+                        recordSubstitutionIn(incomingDisplayId);
                     }
                 }
 
@@ -2651,6 +2658,16 @@ function renderPlayerShootingByGame(playerGames, playerId) {
 
     const rows = playerGames
         .map((game) => {
+            if (!getPlayersWhoPlayed(game).has(playerId)) {
+                return `
+                    <tr class="dnpRow">
+                        <td>${game.gameDate || "—"}</td>
+                        <td>${game.opponent || "—"}</td>
+                        <td colspan="${shotReportColumns.length + 1}">DNP</td>
+                    </tr>
+                `;
+            }
+
             const coverage = getShootingCoverage(game);
             const stats = game.playerStatsById?.[playerId] || {};
 
@@ -2691,6 +2708,374 @@ function renderPlayerShootingByGame(playerGames, playerId) {
             </table>
         </div>
     `;
+}
+
+// ---------- Season reports: games played, tracked stats, averages ----------
+
+// Counted player stats (everything except Points and settings).
+function getPlayerCounterStatKeys() {
+    return playerStats
+        .map((stat) => stat.key)
+        .filter((statKey) => isPlayerCounterStat(statKey));
+}
+
+function hasRecordedValue(stats) {
+    return Object.values(stats || {}).some(
+        (value) => typeof value === "number" && value !== 0
+    );
+}
+
+// Players who played in a saved game: starters, players who came in as a
+// substitute, and anyone who recorded a statistic. One credit per game.
+function getPlayersWhoPlayed(game) {
+    const played = new Set([
+        ...(game.gameStarters || []),
+        ...(game.subbedInPlayerIds || [])
+    ]);
+
+    Object.entries(game.playerStatsById || {}).forEach(([playerId, stats]) => {
+        if (hasRecordedValue(stats)) {
+            played.add(playerId);
+        }
+    });
+
+    return played;
+}
+
+// How much participation evidence a saved game has:
+// "full"             — starters and substitutions were recorded,
+// "startersAndStats" — saved before substitutions were recorded,
+// "statsOnly"        — saved before starters were recorded too.
+function getParticipationEvidence(game) {
+    if (game.participationTracked) {
+        return "full";
+    }
+
+    return Array.isArray(game.gameStarters) && game.gameStarters.length > 0
+        ? "startersAndStats"
+        : "statsOnly";
+}
+
+// Player stats tracked in a saved game: the game's chosen stats (or, for
+// games saved before choices were stored, the stats every player was given at
+// the start), plus any stat with a recorded value (e.g. turned off mid-game).
+function getTrackedPlayerStatKeys(game) {
+    const players = Object.values(game.playerStatsById || {});
+    const tracked = new Set();
+
+    if (Array.isArray(game.selectedPlayerStats)) {
+        game.selectedPlayerStats.forEach((statKey) => tracked.add(statKey));
+    } else {
+        getPlayerCounterStatKeys().forEach((statKey) => {
+            if (players.some((stats) => statKey in stats)) {
+                tracked.add(statKey);
+            }
+        });
+    }
+
+    [...getPlayerCounterStatKeys(), "points"].forEach((statKey) => {
+        if (players.some((stats) => (Number(stats[statKey]) || 0) !== 0)) {
+            tracked.add(statKey);
+        }
+    });
+
+    return tracked;
+}
+
+// Team stats tracked in a saved game: the game's chosen team stats, or for
+// games saved before choices were stored, the stats in its team totals.
+function getTrackedTeamStatKeys(game) {
+    return Array.isArray(game.selectedTeamStats)
+        ? game.selectedTeamStats
+        : Object.keys(game.teamStats || {});
+}
+
+// A Team Averages card: only games where that team stat was tracked.
+// Shooting shows makes / attempts per game and total made ÷ total attempted.
+function getSeasonTeamStatAverage(teamGames, statKey) {
+    const trackedGames = teamGames.filter((game) =>
+        getTrackedTeamStatKeys(game).includes(statKey)
+    );
+
+    const gameCount = trackedGames.length;
+    const gamesLabel =
+        gameCount < teamGames.length
+            ? `${gameCount} of ${teamGames.length} games`
+            : "";
+
+    if (gameCount === 0) {
+        return { statKey, average: "—", gamesLabel };
+    }
+
+    if (
+        statKey === "fieldGoals" ||
+        statKey === "threePointers" ||
+        statKey === "freeThrows"
+    ) {
+        let made = 0;
+        let attempted = 0;
+
+        trackedGames.forEach((game) => {
+            made += Number(game.teamStats?.[statKey]?.made) || 0;
+            attempted += Number(game.teamStats?.[statKey]?.attempted) || 0;
+        });
+
+        const percentage =
+            attempted > 0 ? `${Math.round((made / attempted) * 100)}%` : "—";
+
+        return {
+            statKey,
+            average:
+                `${(made / gameCount).toFixed(1)} / ` +
+                `${(attempted / gameCount).toFixed(1)} · ${percentage}`,
+            gamesLabel
+        };
+    }
+
+    const total = trackedGames.reduce(
+        (sum, game) => sum + (Number(game.teamStats?.[statKey]) || 0),
+        0
+    );
+
+    return {
+        statKey,
+        average: (total / gameCount).toFixed(1),
+        gamesLabel
+    };
+}
+
+// Which Player Season Stats table is showing; Averages by default.
+let seasonStatsView = "averages";
+
+const seasonColumnOrder = [
+    "rebounds",
+    "offensiveRebounds",
+    "defensiveRebounds",
+    "assists",
+    "steals",
+    "blocks",
+    "turnovers",
+    "fouls"
+];
+
+const seasonColumnLabels = {
+    rebounds: "REB",
+    offensiveRebounds: "OREB",
+    defensiveRebounds: "DREB",
+    assists: "AST",
+    steals: "STL",
+    blocks: "BLK",
+    turnovers: "TO",
+    fouls: "PF"
+};
+
+// Each player's games played, and for every stat the season total and the
+// number of games it covers (games where it was tracked and the player
+// played). REB only uses games where both rebound stats were tracked.
+function getSeasonPlayerStats(teamGames, team) {
+    const gameInfo = teamGames.map((game) => ({
+        game,
+        played: getPlayersWhoPlayed(game),
+        tracked: getTrackedPlayerStatKeys(game)
+    }));
+
+    const seasonTracked = new Set();
+
+    gameInfo.forEach(({ tracked }) => {
+        tracked.forEach((statKey) => seasonTracked.add(statKey));
+
+        if (tracked.has("offensiveRebounds") && tracked.has("defensiveRebounds")) {
+            seasonTracked.add("rebounds");
+        }
+    });
+
+    const columns = seasonColumnOrder.filter((statKey) => seasonTracked.has(statKey));
+
+    const players = team.roster.map((player) => {
+        const totals = {};
+        const games = {};
+        let gamesPlayed = 0;
+
+        const add = (statKey, value) => {
+            totals[statKey] = (totals[statKey] || 0) + value;
+            games[statKey] = (games[statKey] || 0) + 1;
+        };
+
+        gameInfo.forEach(({ game, played, tracked }) => {
+            if (!played.has(player.id)) {
+                return;
+            }
+
+            gamesPlayed += 1;
+
+            const stats = game.playerStatsById?.[player.id] || {};
+
+            if (tracked.has("points")) {
+                add("points", Number(stats.points) || 0);
+            }
+
+            getPlayerCounterStatKeys().forEach((statKey) => {
+                if (tracked.has(statKey)) {
+                    add(statKey, Number(stats[statKey]) || 0);
+                }
+            });
+
+            if (tracked.has("offensiveRebounds") && tracked.has("defensiveRebounds")) {
+                add(
+                    "rebounds",
+                    (Number(stats.offensiveRebounds) || 0) +
+                        (Number(stats.defensiveRebounds) || 0)
+                );
+            }
+        });
+
+        return { player, gamesPlayed, totals, games };
+    });
+
+    return { columns, players, gameInfo };
+}
+
+// An average or total. Averages divide by the games where the stat was
+// tracked and the player played (which can be fewer than GP).
+function formatSeasonCell(row, statKey, view) {
+    const games = row.games[statKey] || 0;
+
+    if (games === 0) {
+        return "<td>—</td>";
+    }
+
+    const total = row.totals[statKey] || 0;
+    const value = view === "averages" ? (total / games).toFixed(1) : total;
+
+    return `<td>${value}</td>`;
+}
+
+function renderSeasonPlayerTable(season, view) {
+    const headers = season.columns
+        .map((statKey) => `<th>${seasonColumnLabels[statKey]}</th>`)
+        .join("");
+
+    const rows = season.players
+        .map((row) => {
+            const points = row.totals.points || 0;
+            const pointGames = row.games.points || 0;
+
+            return `
+                <tr>
+                    <td class="seasonPlayerName">#${row.player.number || "—"} ${row.player.name || "Unnamed"}</td>
+                    <td>${row.gamesPlayed}</td>
+                    <td class="seasonPoints">${pointGames ? points : "—"}</td>
+                    ${formatSeasonCell(row, "points", "averages").replace("<td>", '<td class="seasonPoints">')}
+                    ${season.columns.map((statKey) => formatSeasonCell(row, statKey, view)).join("")}
+                </tr>
+            `;
+        })
+        .join("");
+
+    return `
+        <table class="reportPlayerTable seasonPlayerTable">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>GP</th>
+                    <th>PTS</th>
+                    <th>PPG</th>
+                    ${headers}
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+// Player Season Stats: Averages (default) or Totals. PTS and PPG show in both.
+function renderSeasonPlayerSection(teamGames, team) {
+    const season = getSeasonPlayerStats(teamGames, team);
+
+    const olderGames = season.gameInfo.filter(
+        ({ game }) => getParticipationEvidence(game) !== "full"
+    ).length;
+
+    const statsOnlyGames = season.gameInfo.filter(
+        ({ game }) => getParticipationEvidence(game) === "statsOnly"
+    ).length;
+
+    const limitationNote = olderGames
+        ? `
+            <p class="seasonNote seasonLimitationNote">
+                ${olderGames} of ${teamGames.length} game${teamGames.length === 1 ? "" : "s"}
+                ${olderGames === 1 ? "was" : "were"} saved before Court94 recorded substitutions.
+                In ${olderGames === 1 ? "that game" : "those games"}, players who came off the bench
+                without recording a stat aren't counted as having played.
+                ${
+                    statsOnlyGames
+                        ? `${statsOnlyGames} of them also didn't save starters, so only players with recorded stats are counted.`
+                        : ""
+                }
+            </p>
+        `
+        : "";
+
+    return `
+        <div class="reportPlayerStats seasonPlayerSection" data-view="${seasonStatsView}">
+            <div class="seasonPlayerHeader">
+                <h4>Player Season Stats</h4>
+
+                <div class="seasonViewSwitch" role="group" aria-label="Show averages or totals">
+                    <button type="button" data-season-view="averages">Averages</button>
+                    <button type="button" data-season-view="totals">Totals</button>
+                </div>
+            </div>
+
+            <p class="seasonNote">
+                Season averages use only games in which each statistic was tracked.
+            </p>
+
+            ${limitationNote}
+
+            <div class="reportPlayerTableWrap seasonTableAverages">
+                ${renderSeasonPlayerTable(season, "averages")}
+            </div>
+
+            <div class="reportPlayerTableWrap seasonTableTotals">
+                ${renderSeasonPlayerTable(season, "totals")}
+            </div>
+        </div>
+    `;
+}
+
+// ---------- Participation (games played) ----------
+
+// Called only when a substitution actually completes (a SUB OUT paired with
+// a SUB IN). Pending or cancelled taps never get here. One entry per player.
+function recordSubstitutionIn(playerId) {
+    if (!liveGameState) {
+        return;
+    }
+
+    if (!Array.isArray(liveGameState.subbedInPlayerIds)) {
+        liveGameState.subbedInPlayerIds = [];
+    }
+
+    if (!liveGameState.subbedInPlayerIds.includes(playerId)) {
+        liveGameState.subbedInPlayerIds.push(playerId);
+    }
+}
+
+// Substitutes saved with a finished game. As a safety net, anyone on the
+// court at the end who wasn't a starter is included (this also covers a game
+// that was already in progress before substitutions were recorded).
+function getFinalSubbedInPlayerIds(game) {
+    const starters = game.gameStarters || [];
+    const subbedIn = [...(game.subbedInPlayerIds || [])];
+
+    (game.currentFive || []).forEach((playerId) => {
+        if (!starters.includes(playerId) && !subbedIn.includes(playerId)) {
+            subbedIn.push(playerId);
+        }
+    });
+
+    return subbedIn;
 }
 
 function getPlayerMissTotal(playerId, shotType) {
@@ -4192,6 +4577,12 @@ unknownShooterStatsByPeriod:
 
 shootingCoverage:
     getShootingCoverage(liveGameState),
+
+subbedInPlayerIds:
+    getFinalSubbedInPlayerIds(liveGameState),
+
+participationTracked:
+    Boolean(liveGameState.participationTracked),
         completedAt: new Date().toISOString()
     };
 
@@ -5791,170 +6182,25 @@ if (!teamId || !selectedSeason) {
         .filter(Boolean)
         .join(" — ");
 
-        const selectedTeamStats = [
-    ...new Set(
-        teamGames.flatMap((game) => {
-            if (
-                Array.isArray(game.selectedTeamStats) &&
-                game.selectedTeamStats.length > 0
-            ) {
-                return game.selectedTeamStats;
-            }
+    // Team stats tracked in at least one of these games (also used for the
+    // game-by-game trends table).
+    const selectedTeamStats = [
+        ...new Set(
+            teamGames.flatMap((game) => getTrackedTeamStatKeys(game))
+        )
+    ];
 
-            return Object.keys(game.teamStats || {});
-        })
-    )
-];
-const teamStatAverages =
-    selectedTeamStats.map((statKey) => {
-        if (
-            statKey === "fieldGoals" ||
-statKey === "threePointers" ||
-statKey === "freeThrows"
-        ) {
-            let totalMade = 0;
-            let totalAttempted = 0;
+    // Each average only uses games where that team stat was tracked.
+    const teamStatAverages = selectedTeamStats.map((statKey) =>
+        getSeasonTeamStatAverage(teamGames, statKey)
+    );
 
-            teamGames.forEach((game) => {
-                const shootingStat =
-                    game.teamStats?.[statKey];
-
-                if (
-                    shootingStat &&
-                    typeof shootingStat === "object"
-                ) {
-                    totalMade +=
-                        Number(shootingStat.made) || 0;
-
-                    totalAttempted +=
-                        Number(shootingStat.attempted) || 0;
-                }
-            });
-
-            const averageMade =
-                gamesPlayed > 0
-                    ? totalMade / gamesPlayed
-                    : 0;
-
-            const averageAttempted =
-                gamesPlayed > 0
-                    ? totalAttempted / gamesPlayed
-                    : 0;
-
-            const percentage =
-                totalAttempted > 0
-                    ? Math.round(
-                        (totalMade / totalAttempted) * 100
-                    )
-                    : 0;
-
-            return {
-                statKey,
-                average:
-                    `${averageMade.toFixed(1)} / ` +
-                    `${averageAttempted.toFixed(1)} · ` +
-                    `${percentage}%`
-            };
-        }
-
-        let statTotal = 0;
-
-        teamGames.forEach((game) => {
-            statTotal +=
-                Number(
-                    game.teamStats?.[statKey]
-                ) || 0;
-        });
-
-        return {
-            statKey,
-            average:
-                (
-                    statTotal /
-                    gamesPlayed
-                ).toFixed(1)
-        };
-    });
-
-    const selectedPlayerStats = [
-    ...new Set([
-        ...(team.selectedPlayerStats || []),
-        "offensiveRebounds",
-        "defensiveRebounds"
-    ])
-].filter((statKey) => isPlayerCounterStat(statKey));
-
-const playerSeasonStats =
-    team.roster.map((player) => {
-        let totalPoints = 0;
-        let gamesPlayedByPlayer = 0;
-
-        const statTotals = {};
-
-        selectedPlayerStats.forEach((statKey) => {
-            statTotals[statKey] = 0;
-        });
-
-        teamGames.forEach((game) => {
-            const gamePlayerStats =
-                game.playerStatsById?.[player.id];
-
-            if (!gamePlayerStats) {
-                return;
-            }
-
-            gamesPlayedByPlayer += 1;
-
-            totalPoints +=
-                Number(gamePlayerStats.points) || 0;
-
-            selectedPlayerStats.forEach(
-                (statKey) => {
-                    statTotals[statKey] +=
-                        Number(
-                            gamePlayerStats[statKey]
-                        ) || 0;
-                }
-            );
-        });
-
-        const offensiveRebounds =
-    Number(
-        statTotals.offensiveRebounds
-    ) || 0;
-
-const defensiveRebounds =
-    Number(
-        statTotals.defensiveRebounds
-    ) || 0;
-
-const totalRebounds =
-    offensiveRebounds +
-    defensiveRebounds;
-
-return {
-    id: player.id,
-    number: player.number,
-    name: player.name,
-    gamesPlayed: gamesPlayedByPlayer,
-    totalPoints,
-    pointsPerGame:
-        gamesPlayedByPlayer > 0
-            ? (
-                totalPoints /
-                gamesPlayedByPlayer
-            ).toFixed(1)
-            : "0.0",
-    averageRebounds:
-        gamesPlayedByPlayer > 0
-            ? (
-                totalRebounds /
-                gamesPlayedByPlayer
-            ).toFixed(1)
-            : "0.0",
-    statTotals
-};
-});
+    // Roster order for the Player Game-by-Game selector.
+    const playerSeasonStats = team.roster.map((player) => ({
+        id: player.id,
+        number: player.number,
+        name: player.name
+    }));
 
     reportsContent.innerHTML = `
         <div class="reportSection">
@@ -6033,6 +6279,12 @@ return {
                                     <strong class="reportAverageValue">
                                         ${stat.average}
                                     </strong>
+
+                                    ${
+                                        stat.gamesLabel
+                                            ? `<small class="reportAverageGames">${stat.gamesLabel}</small>`
+                                            : ""
+                                    }
                                 </div>
                             `;
                         })
@@ -6043,102 +6295,7 @@ return {
                         </div>
             </div>
 
-            <div class="reportPlayerStats">
-                <h4>Player Season Stats</h4>
-
-                <div class="reportPlayerTableWrap">
-                    <table class="reportPlayerTable">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Player</th>
-                                <th>GP</th>
-<th>PTS</th>
-<th>PPG</th>
-<th>AVG REB</th>
-
-${selectedPlayerStats
-    .map((statKey) => {
-        const playerStatLabels = {
-            offensiveRebounds: "ORebs",
-            defensiveRebounds: "DRebs",
-            turnovers: "TO's"
-        };
-
-        const statLabel =
-            playerStatLabels[statKey] ||
-            statKey
-                .replace(
-                    /([A-Z])/g,
-                    " $1"
-                )
-                .replace(
-                    /^./,
-                    (letter) =>
-                        letter.toUpperCase()
-                );
-
-        return `
-            <th>
-                ${statLabel}
-            </th>
-        `;
-    })
-    .join("")}
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            ${playerSeasonStats
-                                .map((player) => {
-                                    return `
-                                        <tr>
-                                            <td>
-                                                ${player.number || ""}
-                                            </td>
-
-                                            <td>
-                                                ${player.name}
-                                            </td>
-
-                                            <td>
-                                                ${player.gamesPlayed}
-                                            </td>
-
-                                            <td>
-    ${player.totalPoints}
-</td>
-
-<td>
-    ${player.pointsPerGame}
-</td>
-
-<td>
-    ${player.averageRebounds}
-</td>
-
-${selectedPlayerStats
-                                                .map((statKey) => {
-                                                    return `
-                                                        <td>
-                                                            ${
-                                                                player
-                                                                    .statTotals[
-                                                                        statKey
-                                                                    ] || 0
-                                                            }
-                                                        </td>
-                                                    `;
-                                                })
-                                                .join("")}
-                                        </tr>
-                                    `;
-                                })
-                                .join("")}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            ${renderSeasonPlayerSection(teamGames, team)}
                         </div>
         </div>
 
@@ -6184,7 +6341,7 @@ ${selectedPlayerStats
             <h4>Game-by-Game Team Trends</h4>
 
             <div class="reportPlayerTableWrap">
-                <table class="reportPlayerTable">
+                <table class="reportPlayerTable compactReportTable">
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -6267,6 +6424,13 @@ ${selectedPlayerStats
     .map((statKey) => {
         const statValue =
             game.teamStats?.[statKey];
+
+        // "—" when this game didn't track the stat; 0 when tracked but zero.
+        if (!getTrackedTeamStatKeys(game).includes(statKey)) {
+            return `
+                <td>—</td>
+            `;
+        }
 
         if (
     statKey === "fieldGoals" ||
@@ -6352,12 +6516,6 @@ const teamId =
         return;
     }
 
-    const playerStats =
-        (team.selectedPlayerStats || [])
-            .filter((statKey) => {
-                return isPlayerCounterStat(statKey);
-            });
-
     const playerGames =
         savedGames.filter((game) => {
             if (game.teamId !== teamId) {
@@ -6373,9 +6531,46 @@ const teamId =
             );
         });
 
+    // Stats each game actually tracked: untracked stats show "—",
+    // tracked stats with nothing recorded show 0.
+    const trackedByGame = new Map(
+        playerGames.map((game) => [game, getTrackedPlayerStatKeys(game)])
+    );
+
+    // Same participation rule as season GP: started, came in as a
+    // substitute, or recorded a stat. Other games show "DNP".
+    const playedByGame = new Map(
+        playerGames.map((game) => [game, getPlayersWhoPlayed(game).has(playerId)])
+    );
+
+    const playerStats =
+        getPlayerCounterStatKeys().filter((statKey) =>
+            playerGames.some(
+                (game) =>
+                    playedByGame.get(game) &&
+                    trackedByGame.get(game).has(statKey)
+            )
+        );
+
+    // Older games where a bench player without a stat can't be told apart
+    // from one who didn't play.
+    const olderGames = playerGames.filter(
+        (game) => getParticipationEvidence(game) !== "full"
+    ).length;
+
+    const dnpNote = olderGames
+        ? `
+            <p class="seasonNote seasonLimitationNote playerDnpNote">
+                ${olderGames} of these game${olderGames === 1 ? " was" : "s were"} saved before Court94
+                recorded substitutions. In ${olderGames === 1 ? "that game" : "those games"}, DNP means the
+                player didn't start and recorded no stats; they may have come off the bench briefly.
+            </p>
+        `
+        : "";
+
     playerContent.innerHTML = `
         <div class="reportPlayerTableWrap">
-            <table class="reportPlayerTable">
+            <table class="reportPlayerTable compactReportTable">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -6413,9 +6608,24 @@ const teamId =
                             const stats =
     game.playerStatsById[playerId];
 
+const tracked = trackedByGame.get(game);
+
+if (!playedByGame.get(game)) {
+    return `
+                                <tr class="dnpRow">
+                                    <td>${game.gameDate || "—"}</td>
+                                    <td>${game.opponent || "—"}</td>
+                                    <td colspan="${playerStats.length + 2}">DNP</td>
+                                </tr>
+                            `;
+}
+
+// REB only when both rebound stats were tracked in this game.
 const totalRebounds =
-    (Number(stats.offensiveRebounds) || 0) +
-    (Number(stats.defensiveRebounds) || 0);
+    tracked.has("offensiveRebounds") && tracked.has("defensiveRebounds")
+        ? (Number(stats.offensiveRebounds) || 0) +
+          (Number(stats.defensiveRebounds) || 0)
+        : "—";
 
 return `
                                 <tr>
@@ -6428,7 +6638,7 @@ return `
                                     </td>
 
                                     <td>
-    ${Number(stats.points) || 0}
+    ${tracked.has("points") ? Number(stats.points) || 0 : "—"}
 </td>
 
 <td>
@@ -6440,11 +6650,9 @@ ${playerStats
                                             return `
                                                 <td>
                                                     ${
-                                                        Number(
-                                                            stats[
-                                                                statKey
-                                                            ]
-                                                        ) || 0
+                                                        tracked.has(statKey)
+                                                            ? Number(stats[statKey]) || 0
+                                                            : "—"
                                                     }
                                                 </td>
                                             `;
@@ -6457,6 +6665,8 @@ ${playerStats
                 </tbody>
             </table>
         </div>
+
+        ${dnpNote}
 
         ${renderPlayerShootingByGame(playerGames, playerId)}
     `;
@@ -6518,6 +6728,27 @@ updateAppTeamBadge();
             "reportPlayerFilter"
         ) {
             renderPlayerGameReport();
+        }
+    });
+
+// Averages / Totals switch on Player Season Stats. Both tables are already
+// built; this only changes which one shows, and is remembered while the
+// app is open.
+document
+    .getElementById("reportsContent")
+    .addEventListener("click", (event) => {
+        const button = event.target.closest("[data-season-view]");
+
+        if (!button) {
+            return;
+        }
+
+        seasonStatsView = button.dataset.seasonView;
+
+        const section = button.closest(".seasonPlayerSection");
+
+        if (section) {
+            section.dataset.view = seasonStatsView;
         }
     });
 
