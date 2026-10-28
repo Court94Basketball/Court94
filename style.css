@@ -2863,3 +2863,93 @@ color: white;
 .compactReportTable td {
     padding: 10px 6px;
 }
+
+/* PUBLIC BETA NOTICE (Home) and REMINDER (Settings): display only */
+.betaNotice {
+    width: min(1100px, calc(100% - 48px));
+    margin: 24px auto 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 18px;
+    align-items: start;
+    padding: 18px 22px;
+    border: 1px solid var(--border);
+    border-left: 6px solid var(--gold);
+    border-radius: 14px;
+    background: white;
+    color: var(--navy-dark);
+    box-shadow: 0 6px 16px rgba(16, 42, 67, 0.06);
+}
+
+.betaBadge {
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--navy);
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.betaNoticeText p {
+    margin: 0 0 6px;
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.betaNoticeText strong {
+    font-size: 16px;
+}
+
+.betaNoticeText .betaNoticeFine {
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+/* Settings: a shorter one-line reminder, full width of the cards */
+.betaNoticeCompact {
+    width: auto;
+    margin: 0 0 18px;
+    align-items: center;
+    padding: 14px 18px;
+}
+
+p.betaNoticeText {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.backupTip {
+    margin-top: 10px;
+}
+
+/* Phones: badge above the text */
+@media (max-width: 600px) {
+    .betaNotice {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 16px 18px;
+    }
+
+    .betaBadge {
+        justify-self: start;
+    }
+}
+
+/* HEADER ON NARROW SCREENS
+   When the logo and team badge don't fit side by side (phones, or a very
+   long team name), the badge moves to its own line instead of pushing the
+   page wider than the screen. Where they fit (iPads), nothing changes. */
+.appBrand {
+    flex-wrap: wrap;
+    row-gap: 10px;
+}
+
+.appLogo,
+.appTeamBadge {
+    max-width: 100%;
+}
