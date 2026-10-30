@@ -3573,3 +3573,48 @@ p.betaNoticeText {
 .teamStatOpponent {
     background: var(--danger);
 }
+
+/* ---------- LANDSCAPE: OPPONENT SCORING IN THE TOP ROW ----------
+   On the five-across landscape tracker the red controls sit in the
+   TRACK / SUMMARY / TOTAL row instead of the bottom bar, so they never cover
+   the player cards. The row stays at the top of the screen while scrolling
+   to the bench. Portrait and phones keep the bottom bar. */
+@media (orientation: landscape) and (min-width: 1024px) {
+    body.liveTrackerActive #liveGameScreen.opponentScoringOn {
+        padding-bottom: 0;
+    }
+
+    body.liveTrackerActive .opponentScoringOn .trackerTabs {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        grid-template-columns:
+            minmax(96px, 150px) minmax(96px, 150px) auto minmax(0, 1fr);
+        column-gap: 8px;
+        background: var(--background);
+    }
+
+    body.liveTrackerActive .opponentScoringOn .trackerTotal {
+        padding: 0 8px;
+        white-space: nowrap;
+    }
+
+    body.liveTrackerActive .opponentScoring {
+        position: static;
+        grid-column: 4;
+        align-self: center;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    body.liveTrackerActive .opponentScoreTotal {
+        min-width: 58px;
+    }
+
+    body.liveTrackerActive .opponentPointButton,
+    body.liveTrackerActive .opponentUndoButton {
+        min-height: 44px;
+    }
+}
