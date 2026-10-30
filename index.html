@@ -725,6 +725,55 @@
 <div class="trackerTotal">
     TOTAL: <strong id="liveTeamPointTotal">0</strong>
 </div>
+
+<!-- OPPONENT SCORING (only when the Opponent Scoring stat is on) -->
+<div
+    id="opponentScoring"
+    class="opponentScoring"
+    hidden
+>
+    <div class="opponentScoreTotal">
+        <span>OPP</span>
+        <strong id="liveOpponentPointTotal">0</strong>
+    </div>
+
+    <button
+        class="opponentPointButton"
+        type="button"
+        data-opponent-points="1"
+        aria-label="Opponent plus 1"
+    >
+        +1
+    </button>
+
+    <button
+        class="opponentPointButton"
+        type="button"
+        data-opponent-points="2"
+        aria-label="Opponent plus 2"
+    >
+        +2
+    </button>
+
+    <button
+        class="opponentPointButton"
+        type="button"
+        data-opponent-points="3"
+        aria-label="Opponent plus 3"
+    >
+        +3
+    </button>
+
+    <button
+        id="opponentUndoButton"
+        class="opponentUndoButton"
+        type="button"
+        aria-label="Undo last opponent basket"
+        disabled
+    >
+        UNDO
+    </button>
+</div>
             </div>
 
 
@@ -802,6 +851,16 @@
             id="liveSummaryPlayerStats"
             class="liveSummaryTableWrap"
         ></div>
+    </section>
+
+    <section
+        id="liveSummaryLineupCard"
+        class="formCard"
+        hidden
+    >
+        <h3>Lineup Plus/Minus</h3>
+
+        <div id="liveSummaryLineups"></div>
     </section>
 
 </section>
@@ -907,6 +966,18 @@
                     id="summaryPlayerStats"
                     class="summaryPlayerList"
                 ></div>
+
+            </section>
+
+            <section
+                id="summaryLineupCard"
+                class="formCard"
+                hidden
+            >
+
+                <h3>Lineup Plus/Minus</h3>
+
+                <div id="summaryLineups"></div>
 
             </section>
 

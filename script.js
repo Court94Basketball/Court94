@@ -134,6 +134,25 @@ function hasIndividualShooting(statKeys) {
     );
 }
 
+// Team-stat choices that switch a feature on instead of adding a team stat.
+// They aren't in teamStats, so team stat cards and tables skip them.
+const teamStatSettings = [
+    {
+        key: "opponentScoring",
+        name: "Opponent Scoring",
+        description: "Red +1/+2/+3 buttons for opponent baskets. Needed for lineup plus/minus."
+    }
+];
+
+// Every choice shown in the Team Statistics checkboxes.
+function getTeamStatChoices() {
+    return [...teamStats, ...teamStatSettings];
+}
+
+function isTeamStatSetting(statKey) {
+    return teamStatSettings.some((setting) => setting.key === statKey);
+}
+
 // Individual shooting coverage for a game in progress or a saved game:
 // "full"    — on from the start and never turned off,
 // "partial" — on for only part of the game,
@@ -321,7 +340,7 @@ function renderStatChoices() {
     const playerStatChoices =
         document.getElementById("playerStatChoices");
 
-    teamStatChoices.innerHTML = teamStats
+    teamStatChoices.innerHTML = getTeamStatChoices()
         .map((stat) => {
             return `
                 <label class="statChoice">
@@ -518,7 +537,7 @@ const selectedPlayerStats = [
         []
     )
 ];
-    gameTeamStatChoices.innerHTML = teamStats
+    gameTeamStatChoices.innerHTML = getTeamStatChoices()
         .map((stat) => {
             const isChecked =
                 selectedTeamStats.includes(stat.key);
@@ -697,7 +716,10 @@ function createEmptyStatObject(statKeys) {
     const statObject = {};
 
     statKeys.forEach((statKey) => {
-        if (playerStatSettings.includes(statKey)) {
+        if (
+            playerStatSettings.includes(statKey) ||
+            isTeamStatSetting(statKey)
+        ) {
             return;
         }
 
@@ -758,6 +780,9 @@ function saveLiveGameSetupChanges() {
         )
     );
 
+    // Records the settings in place before this change (older games).
+    ensureScoringTracking();
+
     liveGameState.gameStarters = gameStarters;
 
     // Must be worked out before the new player stats replace the old ones.
@@ -771,6 +796,10 @@ function saveLiveGameSetupChanges() {
         selectedGameTeamStats;
     liveGameState.selectedPlayerStats =
         selectedGamePlayerStats;
+
+    // Opponent Scoring or Points turned on or off: plus/minus only uses
+    // baskets from when both were tracked.
+    noteScoringTrackingChange();
 
     selectedGameTeamStats.forEach((statKey) => {
         if (
@@ -968,6 +997,11 @@ team.roster.forEach((player) => {
     ][player.id].points = 0;
 });
 
+    // Which teams' scoring is tracked from the start (for plus/minus), and
+    // the starting five in the lineup log when Opponent Scoring is on.
+    liveGameState.scoringTracking = [getScoringTrackingState()];
+    addScoringLogEvent("lineup");
+
     renderLiveGame();
 
     // Every new game opens on TRACK, and the (hidden) Summary is rebuilt for
@@ -1045,6 +1079,32 @@ periodSelect.value = liveGameState.period;
     renderTeamStatButtons();
     updateLiveTeamPointTotal();
     renderLastAction();
+
+    ensureScoringTracking();
+    renderOpponentScoring();
+}
+
+// Alphabetical by first name (the name as entered, first word first).
+// Unnamed players go last; ties go by jersey number.
+function comparePlayersByFirstName(playerA, playerB) {
+    const nameA = (playerA.name || "").trim();
+    const nameB = (playerB.name || "").trim();
+
+    if (!nameA || !nameB) {
+        if (nameA || nameB) {
+            return nameA ? -1 : 1;
+        }
+    }
+
+    return (
+        nameA.localeCompare(nameB, undefined, { sensitivity: "base" }) ||
+        String(playerA.number || "").localeCompare(
+            String(playerB.number || ""),
+            undefined,
+            { numeric: true }
+        ) ||
+        String(playerA.id).localeCompare(String(playerB.id))
+    );
 }
 
 function renderPlayerBench() {
@@ -1076,14 +1136,29 @@ if (!liveGameState.playerDisplayOrder) {
     ];
 }
 
-const sortedRoster =
-    liveGameState.playerDisplayOrder
-        .map((playerId) =>
-            team.roster.find(
-                (player) => player.id === playerId
-            )
-        )
-        .filter(Boolean);
+// SUB IN looks players up here, so it must include everyone on the roster
+// (e.g. a player added to the team during the game).
+team.roster.forEach((player) => {
+    if (!liveGameState.playerDisplayOrder.includes(player.id)) {
+        liveGameState.playerDisplayOrder.push(player.id);
+    }
+});
+
+// Cards show the five on the court, then the bench, each alphabetical by
+// first name. Display only: player IDs, stats, substitutions and plus/minus
+// don't depend on card order. A completed substitution changes currentFive,
+// so both groups re-sort; a pending SUB OUT or SUB IN doesn't move anyone.
+const onCourtPlayers =
+    team.roster
+        .filter((player) => currentFive.includes(player.id))
+        .sort(comparePlayersByFirstName);
+
+const benchPlayers =
+    team.roster
+        .filter((player) => !currentFive.includes(player.id))
+        .sort(comparePlayersByFirstName);
+
+const sortedRoster = [...onCourtPlayers, ...benchPlayers];
     playerBench.innerHTML = sortedRoster
         .map((player, index) => {
             const points =
@@ -1245,7 +1320,7 @@ const sortedRoster =
 
              </article>
 
-${index === 4 ? `<div class="benchDivider">BENCH</div>` : ""}
+${index === onCourtPlayers.length - 1 ? `<div class="benchDivider">BENCH</div>` : ""}
 `;
         })
         .join("");
@@ -1368,6 +1443,8 @@ function connectPlayerCardButtons() {
                 }
             }
 
+            let lineupChanged = false;
+
             while (
                 pendingSubOutPlayerIds.length > 0 &&
                 pendingSubInPlayerIds.length > 0
@@ -1398,6 +1475,7 @@ function connectPlayerCardButtons() {
 
                         // A completed substitution: this player played.
                         recordSubstitutionIn(incomingDisplayId);
+                        lineupChanged = true;
                     }
                 }
 
@@ -1433,6 +1511,12 @@ function connectPlayerCardButtons() {
                         ]
                     ];
                 }
+            }
+
+            // The new five in the lineup log (one entry per tap, so a queued
+            // double substitution records only the final lineup).
+            if (lineupChanged) {
+                addScoringLogEvent("lineup");
             }
 
             renderPlayerBench();
@@ -2293,6 +2377,10 @@ function recordUnknownShot(statKey, result) {
         shotType,
         result,
         period: liveGameState.period,
+        scoringEventId:
+            result === "make"
+                ? addScoringLogEvent("for", shot.points)
+                : null,
         description:
             result === "make"
                 ? `Unknown shooter — TEAM +${shot.points}`
@@ -2785,9 +2873,11 @@ function getTrackedPlayerStatKeys(game) {
 // Team stats tracked in a saved game: the game's chosen team stats, or for
 // games saved before choices were stored, the stats in its team totals.
 function getTrackedTeamStatKeys(game) {
-    return Array.isArray(game.selectedTeamStats)
-        ? game.selectedTeamStats
-        : Object.keys(game.teamStats || {});
+    return (
+        Array.isArray(game.selectedTeamStats)
+            ? game.selectedTeamStats
+            : Object.keys(game.teamStats || {})
+    ).filter((statKey) => !isTeamStatSetting(statKey));
 }
 
 // A Team Averages card: only games where that team stat was tracked.
@@ -3078,6 +3168,607 @@ function getFinalSubbedInPlayerIds(game) {
     return subbedIn;
 }
 
+// ---------- Opponent scoring and lineup plus/minus ----------
+//
+// While Opponent Scoring is on, every basket (ours and the opponent's) is
+// added to the game's scoringLog with the five players on the court at that
+// moment. Lineup and player plus/minus are always worked out from the log,
+// never kept as running totals, so Undo only has to remove the basket's
+// entry. Games that never turn Opponent Scoring on store nothing extra.
+//
+// scoringLog: {
+//     lineups: [[playerId, ...]]  — each distinct five, sorted, so player
+//                                   order and court position don't matter
+//     events: [{ id, type: "for" | "against" | "lineup", lineup, period,
+//                points, bothTracked }]
+//     nextEventId
+// }
+// scoringTracking: [{ period, opponentScoring, points }] — the settings at
+// the start of the game and after every change. bothTracked marks baskets
+// recorded while both teams' scoring was tracked; only those count toward
+// plus/minus.
+
+function isOpponentScoringOn() {
+    const team = getSelectedTeam();
+
+    return Boolean(
+        liveGameState &&
+        team &&
+        getGameStatKeys(liveGameState, team, "selectedTeamStats")
+            .includes("opponentScoring")
+    );
+}
+
+function getScoringTrackingState() {
+    return {
+        period: liveGameState.period,
+        opponentScoring: isOpponentScoringOn(),
+        points: isTrackingPlayerPoints()
+    };
+}
+
+// A game started before this was recorded (e.g. in progress during an
+// update) begins with Opponent Scoring off, since it didn't exist yet.
+function ensureScoringTracking() {
+    if (!liveGameState || Array.isArray(liveGameState.scoringTracking)) {
+        return;
+    }
+
+    liveGameState.scoringTracking = [
+        { ...getScoringTrackingState(), opponentScoring: false }
+    ];
+}
+
+// After Edit Game Setup. A change made before anything has been recorded
+// in the first period just replaces the starting settings.
+function noteScoringTrackingChange() {
+    ensureScoringTracking();
+
+    const tracking = liveGameState.scoringTracking;
+    const previous = tracking[tracking.length - 1];
+    const now = getScoringTrackingState();
+
+    if (
+        previous.opponentScoring === now.opponentScoring &&
+        previous.points === now.points
+    ) {
+        return;
+    }
+
+    const firstPeriod =
+        liveGameState.gameFormat === "Halves" ? "1st Half" : "Q1";
+
+    if (
+        liveActionHistory.length === 0 &&
+        liveGameState.period === firstPeriod
+    ) {
+        liveGameState.scoringTracking = [now];
+    } else {
+        tracking.push(now);
+    }
+
+    // The five on the court when tracking starts.
+    addScoringLogEvent("lineup");
+}
+
+function getScoringLog() {
+    if (!liveGameState.scoringLog) {
+        liveGameState.scoringLog = {
+            lineups: [],
+            events: [],
+            nextEventId: 1
+        };
+    }
+
+    return liveGameState.scoringLog;
+}
+
+function getLineupIndex(log, playerIds) {
+    const lineup = [...new Set(playerIds.map(String))].sort();
+    const lineupKey = lineup.join("|");
+
+    const index = log.lineups.findIndex(
+        (savedLineup) => savedLineup.join("|") === lineupKey
+    );
+
+    if (index !== -1) {
+        return index;
+    }
+
+    log.lineups.push(lineup);
+    return log.lineups.length - 1;
+}
+
+// Adds a basket ("for" / "against") or a lineup change ("lineup") with the
+// five on the court right now. Only while Opponent Scoring is on. Returns
+// the entry's id, which the Undo entry keeps, or null.
+function addScoringLogEvent(type, points = 0) {
+    if (!isOpponentScoringOn()) {
+        return null;
+    }
+
+    const log = getScoringLog();
+
+    const event = {
+        id: log.nextEventId,
+        type,
+        lineup: getLineupIndex(log, liveGameState.currentFive || []),
+        period: liveGameState.period
+    };
+
+    log.nextEventId += 1;
+
+    if (type !== "lineup") {
+        event.points = points;
+        event.bothTracked = isTrackingPlayerPoints();
+    }
+
+    log.events.push(event);
+    return event.id;
+}
+
+// Undo removes exactly the entry its basket added, whichever lineup it
+// belongs to.
+function removeScoringLogEvent(eventId) {
+    const log = liveGameState?.scoringLog;
+
+    if (!log || eventId === undefined || eventId === null) {
+        return;
+    }
+
+    log.events = log.events.filter((event) => event.id !== eventId);
+}
+
+// Our points as recorded (players plus TEAM unknown shooters).
+function getRecordedTeamPoints(game) {
+    return (
+        Object.values(game?.playerStatsById || {}).reduce(
+            (sum, playerStats) => sum + (playerStats.points || 0),
+            0
+        ) + (game?.unknownShooterStats?.points || 0)
+    );
+}
+
+function getTrackedOpponentPoints(game) {
+    return (game?.scoringLog?.events || [])
+        .filter((event) => event.type === "against")
+        .reduce((sum, event) => sum + (event.points || 0), 0);
+}
+
+function recordOpponentPoints(points) {
+    if (!isOpponentScoringOn()) {
+        return;
+    }
+
+    liveActionHistory.push({
+        type: "opponentPoints",
+        amount: points,
+        period: liveGameState.period,
+        scoringEventId: addScoringLogEvent("against", points),
+        description: `Opponent — +${points} Point${points === 1 ? "" : "s"}`
+    });
+
+    renderOpponentScoring();
+    renderLastAction();
+    saveLiveGameState();
+}
+
+// Opponent UNDO: the most recent opponent basket only.
+function undoOpponentPoints() {
+    for (let i = liveActionHistory.length - 1; i >= 0; i -= 1) {
+        const action = liveActionHistory[i];
+
+        if (action.type !== "opponentPoints") {
+            continue;
+        }
+
+        removeScoringLogEvent(action.scoringEventId);
+        liveActionHistory.splice(i, 1);
+
+        renderOpponentScoring();
+        renderLastAction();
+        saveLiveGameState();
+        return;
+    }
+}
+
+// The red opponent controls: shown only while Opponent Scoring is on.
+function renderOpponentScoring() {
+    const controls = document.getElementById("opponentScoring");
+
+    if (!controls) {
+        return;
+    }
+
+    const isOn = isOpponentScoringOn();
+
+    controls.hidden = !isOn;
+
+    document
+        .getElementById("liveGameScreen")
+        .classList.toggle("opponentScoringOn", isOn);
+
+    if (!isOn) {
+        return;
+    }
+
+    document.getElementById("liveOpponentPointTotal").textContent =
+        getTrackedOpponentPoints(liveGameState);
+
+    document.getElementById("opponentUndoButton").disabled =
+        !liveActionHistory.some(
+            (action) => action.type === "opponentPoints"
+        );
+}
+
+// ---------- Lineup report ----------
+
+// "full" when the setting was on at the start and never changed, "partial"
+// when it was on for part of the game, "none" when never on (or the game was
+// saved before this was recorded).
+function getScoringCoverage(game, settingName) {
+    const tracking = Array.isArray(game?.scoringTracking)
+        ? game.scoringTracking
+        : [];
+
+    const onCount = tracking.filter((entry) => entry[settingName]).length;
+
+    if (onCount === 0) {
+        return "none";
+    }
+
+    return onCount === tracking.length ? "full" : "partial";
+}
+
+// What a game's lineup report can show:
+// "plusMinus"     — both teams' scoring was tracked for at least part of it,
+// "pointsAllowed" — opponent scoring only (Points was off),
+// "none"          — Opponent Scoring was never on.
+function getLineupReportMode(game) {
+    const tracking = Array.isArray(game?.scoringTracking)
+        ? game.scoringTracking
+        : [];
+
+    if (tracking.some((entry) => entry.opponentScoring && entry.points)) {
+        return "plusMinus";
+    }
+
+    if (tracking.some((entry) => entry.opponentScoring)) {
+        return "pointsAllowed";
+    }
+
+    return "none";
+}
+
+function getLineupReportCoverage(game, mode) {
+    if (mode === "pointsAllowed") {
+        return getScoringCoverage(game, "opponentScoring");
+    }
+
+    return getScoringCoverage(game, "opponentScoring") === "full" &&
+        getScoringCoverage(game, "points") === "full"
+        ? "full"
+        : "partial";
+}
+
+// Lineup and player totals from the log. Plus/minus counts only baskets
+// recorded while both teams' scoring was tracked; Points Allowed counts
+// every opponent basket.
+function getLineupTotals(game, mode) {
+    const log = game.scoringLog || { lineups: [], events: [] };
+    const lineupRows = new Map();
+    const playerRows = new Map();
+
+    const countedEvents = log.events.filter((event) =>
+        mode === "plusMinus"
+            ? (event.type === "for" || event.type === "against") &&
+              event.bothTracked
+            : event.type === "against"
+    );
+
+    const addPoints = (row, event) => {
+        if (event.type === "for") {
+            row.pointsFor += event.points || 0;
+        } else {
+            row.pointsAgainst += event.points || 0;
+        }
+    };
+
+    countedEvents.forEach((event) => {
+        const lineup = log.lineups[event.lineup] || [];
+
+        if (!lineupRows.has(event.lineup)) {
+            lineupRows.set(event.lineup, {
+                playerIds: lineup,
+                firstEventId: event.id,
+                pointsFor: 0,
+                pointsAgainst: 0
+            });
+        }
+
+        addPoints(lineupRows.get(event.lineup), event);
+
+        lineup.forEach((playerId) => {
+            if (!playerRows.has(playerId)) {
+                playerRows.set(playerId, {
+                    playerId,
+                    pointsFor: 0,
+                    pointsAgainst: 0
+                });
+            }
+
+            addPoints(playerRows.get(playerId), event);
+        });
+    });
+
+    return {
+        lineups: [...lineupRows.values()],
+        players: [...playerRows.values()]
+    };
+}
+
+function formatPlusMinus(value) {
+    if (value > 0) {
+        return `+${value}`;
+    }
+
+    return value < 0 ? `−${Math.abs(value)}` : "0";
+}
+
+function describeScoringTrackingChanges(game) {
+    const tracking = game.scoringTracking || [];
+
+    return tracking.slice(1).map((entry, index) => {
+        const previous = tracking[index];
+        const changes = [];
+
+        if (entry.opponentScoring !== previous.opponentScoring) {
+            changes.push(
+                `Opponent Scoring turned ${entry.opponentScoring ? "on" : "off"}`
+            );
+        }
+
+        if (entry.points !== previous.points) {
+            changes.push(`Points turned ${entry.points ? "on" : "off"}`);
+        }
+
+        return `${changes.join(" and ")} in ${entry.period}.`;
+    });
+}
+
+function renderLineupNote(kind, text) {
+    return `<p class="lineupNote lineupNote${kind}">${text}</p>`;
+}
+
+// The Lineup Plus/Minus section for a live, end-of-game or saved game.
+// finalScore is { team, opponent } (opponent null until it's entered), or
+// null while the game is live. Returns "" when the game has no lineup data.
+function renderLineupPlusMinusSection(game, team, finalScore) {
+    const mode = getLineupReportMode(game);
+
+    if (mode === "none") {
+        return "";
+    }
+
+    const coverage = getLineupReportCoverage(game, mode);
+    const totals = getLineupTotals(game, mode);
+    const isPlusMinus = mode === "plusMinus";
+    const notes = [];
+
+    // 1. Was scoring tracked for the whole game?
+    if (coverage === "full") {
+        notes.push(renderLineupNote(
+            "Ok",
+            isPlusMinus
+                ? "Whole game: both teams' scoring was tracked from start to finish."
+                : "Whole game: opponent scoring was tracked from start to finish."
+        ));
+    } else {
+        notes.push(renderLineupNote(
+            "Warn",
+            (isPlusMinus
+                ? "<strong>Partial game.</strong> Both teams' scoring was tracked for only part of this game. These numbers include only baskets from those stretches and are not full-game results."
+                : "<strong>Partial game.</strong> Opponent scoring was tracked for only part of this game. These numbers are not full-game results.") +
+                " " +
+                describeScoringTrackingChanges(game).join(" ")
+        ));
+    }
+
+    if (!isPlusMinus) {
+        notes.push(renderLineupNote(
+            "Info",
+            "Points was off while Opponent Scoring was on, so only Points Allowed is shown. Plus/minus needs both."
+        ));
+    }
+
+    // 2. Do the recorded points match the final score?
+    const recordedTeamPoints = getRecordedTeamPoints(game);
+    const recordedOpponentPoints = getTrackedOpponentPoints(game);
+
+    if (!finalScore || finalScore.opponent === null) {
+        notes.push(renderLineupNote(
+            "Info",
+            `Recorded so far: ${isPlusMinus ? `${team.teamName} ${recordedTeamPoints}, ` : ""}Opponent ${recordedOpponentPoints}. These are checked against the final score once it's entered.`
+        ));
+    } else {
+        const teamMatches =
+            !isPlusMinus || recordedTeamPoints === finalScore.team;
+        const opponentMatches =
+            recordedOpponentPoints === finalScore.opponent;
+
+        notes.push(
+            teamMatches && opponentMatches
+                ? renderLineupNote(
+                      "Ok",
+                      `Recorded points match the final score (${finalScore.team}–${finalScore.opponent}).`
+                  )
+                : renderLineupNote(
+                      "Warn",
+                      `<strong>Recorded points don't match the final score.</strong> Recorded: ${isPlusMinus ? `${team.teamName} ${recordedTeamPoints}, ` : ""}Opponent ${recordedOpponentPoints}. Final: ${finalScore.team}–${finalScore.opponent}. Lineup numbers include recorded points only.`
+                  )
+        );
+    }
+
+    const rosterById = new Map(
+        (team.roster || []).map((player) => [String(player.id), player])
+    );
+
+    const playerLabel = (playerId) => {
+        const player = rosterById.get(String(playerId));
+
+        return player
+            ? `#${player.number || "—"} ${player.name || "Unnamed"}`
+            : "Removed player";
+    };
+
+    const sortPlayerIds = (playerIds) =>
+        [...playerIds].sort((a, b) => {
+            const playerA = rosterById.get(String(a));
+            const playerB = rosterById.get(String(b));
+
+            if (!playerA || !playerB) {
+                return playerA ? -1 : playerB ? 1 : 0;
+            }
+
+            return comparePlayersByFirstName(playerA, playerB);
+        });
+
+    const valueCells = (row) =>
+        isPlusMinus
+            ? `
+                <td>${row.pointsFor}</td>
+                <td>${row.pointsAgainst}</td>
+                <td class="plusMinusCell">${formatPlusMinus(row.pointsFor - row.pointsAgainst)}</td>
+            `
+            : `<td>${row.pointsAgainst}</td>`;
+
+    const valueHeads = isPlusMinus
+        ? "<th>PF</th><th>PA</th><th>+/−</th>"
+        : "<th>PA</th>";
+
+    // Plus/minus: best first. Points Allowed: in the order lineups were used.
+    const byPlusMinus = (a, b) =>
+        (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) ||
+        b.pointsFor - a.pointsFor;
+
+    const lineupRows = [...totals.lineups]
+        .sort(isPlusMinus ? byPlusMinus : (a, b) => a.firstEventId - b.firstEventId)
+        .map((row) => {
+            const incomplete =
+                row.playerIds.length !== 5 ||
+                row.playerIds.some((id) => !rosterById.has(String(id)));
+
+            return `
+                <tr>
+                    <td class="lineupPlayersCell">
+                        ${incomplete ? `<span class="lineupIncomplete">Incomplete lineup</span>` : ""}
+                        ${sortPlayerIds(row.playerIds)
+                            .map((id) => `<span class="lineupPlayer">${playerLabel(id)}</span>`)
+                            .join("")}
+                    </td>
+                    ${valueCells(row)}
+                </tr>
+            `;
+        })
+        .join("");
+
+    const playerRows = [...totals.players]
+        .sort((a, b) => {
+            const playerA = rosterById.get(String(a.playerId));
+            const playerB = rosterById.get(String(b.playerId));
+            const byName =
+                playerA && playerB
+                    ? comparePlayersByFirstName(playerA, playerB)
+                    : 0;
+
+            return isPlusMinus ? byPlusMinus(a, b) || byName : byName;
+        })
+        .map((row) => `
+            <tr>
+                <td class="lineupPlayerNameCell">${playerLabel(row.playerId)}</td>
+                ${valueCells(row)}
+            </tr>
+        `)
+        .join("");
+
+    const emptyMessage = isPlusMinus
+        ? "No baskets recorded yet while both teams' scoring was tracked."
+        : "No opponent baskets recorded yet.";
+
+    return `
+        <div class="lineupNotes">${notes.join("")}</div>
+
+        ${
+            totals.lineups.length === 0
+                ? `<p class="lineupEmpty">${emptyMessage}</p>`
+                : `
+                    <h4 class="lineupTableHeading">Lineups</h4>
+                    <div class="boxScoreWrap">
+                        <table class="boxScoreTable lineupTable">
+                            <thead><tr><th>Five on the court</th>${valueHeads}</tr></thead>
+                            <tbody>${lineupRows}</tbody>
+                        </table>
+                    </div>
+
+                    <h4 class="lineupTableHeading">Players</h4>
+                    <div class="boxScoreWrap">
+                        <table class="boxScoreTable lineupTable">
+                            <thead><tr><th>Player (while on the court)</th>${valueHeads}</tr></thead>
+                            <tbody>${playerRows}</tbody>
+                        </table>
+                    </div>
+                `
+        }
+
+        <p class="lineupKey">${
+            isPlusMinus
+                ? "PF = points scored by your team, PA = points allowed, +/− = PF minus PA, while those players were on the court."
+                : "PA = points allowed while those players were on the court."
+        }</p>
+    `;
+}
+
+// Fills (or hides) a summary screen's Lineup Plus/Minus card.
+function showLineupPlusMinusCard(cardId, contentId, game, team, finalScore) {
+    const html = renderLineupPlusMinusSection(game, team, finalScore);
+    const card = document.getElementById(cardId);
+
+    card.hidden = !html;
+    document.getElementById(contentId).innerHTML = html;
+
+    card.querySelector("h3").textContent =
+        getLineupReportMode(game) === "pointsAllowed"
+            ? "Lineup Points Allowed"
+            : "Lineup Plus/Minus";
+}
+
+// The end-of-game summary's opponent score, or null while it's blank.
+function getEnteredOpponentScore() {
+    const value =
+        document.getElementById("summaryOpponentScore").value.trim();
+
+    return value === "" ? null : Number(value) || 0;
+}
+
+function renderEndOfGameLineups() {
+    const team = getSelectedTeam();
+
+    if (!team || !liveGameState) {
+        return;
+    }
+
+    showLineupPlusMinusCard(
+        "summaryLineupCard",
+        "summaryLineups",
+        liveGameState,
+        team,
+        {
+            team: getRecordedTeamPoints(liveGameState),
+            opponent: getEnteredOpponentScore()
+        }
+    );
+}
+
 function getPlayerMissTotal(playerId, shotType) {
     const shot = shotTypes[shotType];
 
@@ -3124,6 +3815,8 @@ function recordPlayerPoints(points) {
         // Marks entries whose Undo also reverses the player's
         // shooting counters. Entries from older games don't have it.
         shotCountersRecorded: true,
+        // The basket's lineup-log entry (null while Opponent Scoring is off).
+        scoringEventId: addScoringLogEvent("for", points),
         period: liveGameState.period,
         description:
             `#${player.number || "—"} ${player.name} — +${points} Point${
@@ -3437,6 +4130,7 @@ function undoShootingResult(statKey) {
             action.period || liveGameState.period
         );
 
+        removeScoringLogEvent(action.scoringEventId);
         liveActionHistory.splice(actionIndex, 1);
 
         renderTeamStatButtons();
@@ -3965,6 +4659,14 @@ const playerGameTotal =
 
     ${renderPlayerShootingSection(liveGameState, team)}
 `;
+
+    showLineupPlusMinusCard(
+        "liveSummaryLineupCard",
+        "liveSummaryLineups",
+        liveGameState,
+        team,
+        null
+    );
 }
 
 function openGameSummary() {
@@ -4142,10 +4844,17 @@ document.getElementById(
 ).value = calculatedTeamScore;
 
 // Left empty so the faded "0" placeholder shows and the coach can type the
-// score straight away. A typed 0 is still a valid score.
+// score straight away. A typed 0 is still a valid score. When opponent
+// scoring was tracked for the whole game, it starts at the tracked total
+// (the coach can still change it).
 document.getElementById(
     "summaryOpponentScore"
-).value = "";
+).value =
+    getScoringCoverage(liveGameState, "opponentScoring") === "full"
+        ? getTrackedOpponentPoints(liveGameState)
+        : "";
+
+renderEndOfGameLineups();
 
     showScreen("gameSummary");
 }
@@ -4517,6 +5226,17 @@ document.getElementById(
 document.getElementById(
     "saveCompletedGameButton"
 ).style.display = "none";
+
+showLineupPlusMinusCard(
+    "summaryLineupCard",
+    "summaryLineups",
+    game,
+    team,
+    {
+        team: Number(game.teamScore) || 0,
+        opponent: Number(game.opponentScore) || 0
+    }
+);
     showScreen("gameSummary");
 }
 function saveCompletedGame() {
@@ -4583,6 +5303,18 @@ subbedInPlayerIds:
 
 participationTracked:
     Boolean(liveGameState.participationTracked),
+
+// Lineup plus/minus data, only for games that used Opponent Scoring.
+...(getScoringCoverage(liveGameState, "opponentScoring") !== "none"
+    ? {
+          scoringLog: liveGameState.scoringLog || {
+              lineups: [],
+              events: [],
+              nextEventId: 1
+          },
+          scoringTracking: liveGameState.scoringTracking
+      }
+    : {}),
         completedAt: new Date().toISOString()
     };
 
@@ -4959,6 +5691,7 @@ if (action.statKey === "turnovers") {
 }
         }
 
+        removeScoringLogEvent(action.scoringEventId);
         liveActionHistory.splice(index, 1);
 
         renderPlayerBench();
@@ -4975,6 +5708,15 @@ updateLiveTeamPointTotal();
 function undoLastAction() {
     const lastAction =
         liveActionHistory.pop();
+
+    // Only for baskets this Undo actually takes back, so the lineup log
+    // always matches the score.
+    if (
+        lastAction?.type === "playerPoints" ||
+        lastAction?.type === "opponentPoints"
+    ) {
+        removeScoringLogEvent(lastAction.scoringEventId);
+    }
         console.log("UNDO ACTION:", lastAction);
 
     if (!lastAction) {
@@ -5131,6 +5873,7 @@ if (
     renderPlayerStatButtons();
     renderTeamStatButtons();
     renderLastAction();
+    renderOpponentScoring();
 }
 function openNewGameScreen() {
     const team = getSelectedTeam();
@@ -5242,7 +5985,7 @@ const uniquePlayerStats = [
 
 const combinedStats = [
     ...uniqueTeamStats.map((statKey) => {
-        return teamStats.find(
+        return getTeamStatChoices().find(
             (stat) => stat.key === statKey
         );
     }),
@@ -5424,7 +6167,7 @@ function openTeamDetails(teamId) {
 
     detailsTeamStats.innerHTML = team.selectedTeamStats
         .map((statKey) => {
-            const stat = teamStats.find(
+            const stat = getTeamStatChoices().find(
                 (item) => item.key === statKey
             );
 
@@ -6901,6 +7644,28 @@ document
 document
     .getElementById("undoLastActionButton")
     .addEventListener("click", undoLastAction);
+
+// Red opponent scoring controls (shown only while Opponent Scoring is on).
+document
+    .querySelectorAll("[data-opponent-points]")
+    .forEach((button) => {
+        button.addEventListener("click", () => {
+            recordOpponentPoints(Number(button.dataset.opponentPoints));
+        });
+    });
+
+document
+    .getElementById("opponentUndoButton")
+    .addEventListener("click", undoOpponentPoints);
+
+// The end-of-game score check updates as the opponent's score is typed.
+document
+    .getElementById("summaryOpponentScore")
+    .addEventListener("input", () => {
+        if (!viewingSavedGame) {
+            renderEndOfGameLineups();
+        }
+    });
 
 document
     document
