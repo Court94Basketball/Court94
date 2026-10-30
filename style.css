@@ -3394,3 +3394,182 @@ p.betaNoticeText {
         padding: 0 10px;
     }
 }
+
+/* ---------- OPPONENT SCORING ----------
+   Red, so it's never mistaken for our yellow scoring buttons or the blue
+   team stat buttons. Shown only when the Opponent Scoring stat is on: a
+   slim bar pinned to the bottom of the screen, so it's reachable however
+   far the tracker is scrolled. */
+.opponentScoring {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    gap: 8px;
+    padding: 8px max(16px, calc((100vw - 900px) / 2))
+        calc(8px + env(safe-area-inset-bottom));
+    background: var(--card);
+    border-top: 3px solid var(--danger);
+    box-shadow: 0 -4px 12px rgba(16, 42, 67, 0.15);
+}
+
+.opponentScoring[hidden] {
+    display: none;
+}
+
+.opponentScoreTotal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    padding: 0 8px;
+    border-radius: 10px;
+    background: #fdecea;
+    color: var(--danger);
+    font-weight: 900;
+}
+
+.opponentScoreTotal span {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+}
+
+.opponentScoreTotal strong {
+    font-size: 22px;
+    line-height: 1.1;
+}
+
+.opponentPointButton,
+.opponentUndoButton {
+    flex: 1 1 0;
+    min-width: 56px;
+    min-height: 52px;
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: 900;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.opponentPointButton {
+    border: 0;
+    background: var(--danger);
+    color: white;
+}
+
+.opponentUndoButton {
+    border: 2px solid var(--danger);
+    background: white;
+    color: var(--danger);
+    font-size: 15px;
+}
+
+.opponentPointButton:active,
+.opponentUndoButton:active {
+    transform: scale(0.97);
+}
+
+.opponentUndoButton:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Room at the bottom so the bar never covers Finish Game. */
+#liveGameScreen.opponentScoringOn {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+/* ---------- LINEUP PLUS/MINUS REPORT ---------- */
+.lineupNotes {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.lineupNote {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.lineupNoteOk {
+    background: #e8f5ec;
+    color: #14532d;
+}
+
+.lineupNoteWarn {
+    border-left: 4px solid #d97706;
+    background: #fff4e5;
+    color: #7a3e00;
+}
+
+.lineupNoteInfo {
+    background: #eef3f8;
+    color: var(--text);
+}
+
+.lineupTableHeading {
+    margin: 14px 0 6px;
+    color: var(--navy);
+    font-size: 15px;
+}
+
+.lineupTable {
+    min-width: 0;
+}
+
+.boxScoreTable.lineupTable th:first-child,
+.boxScoreTable.lineupTable td:first-child {
+    text-align: left;
+}
+
+.boxScoreTable.lineupTable th:nth-child(2),
+.boxScoreTable.lineupTable td:nth-child(2) {
+    text-align: center;
+}
+
+.boxScoreTable.lineupTable th:not(:first-child),
+.boxScoreTable.lineupTable td:not(:first-child) {
+    width: 56px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.lineupPlayersCell {
+    min-width: 200px;
+    line-height: 1.5;
+}
+
+.lineupPlayer {
+    display: inline-block;
+    margin-right: 12px;
+    white-space: nowrap;
+}
+
+.lineupIncomplete {
+    display: block;
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.plusMinusCell {
+    font-weight: 900;
+}
+
+.lineupKey,
+.lineupEmpty {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+/* Opponent team stats (Opp. Off Rebs) share the opponent scoring red. */
+.teamStatOpponent {
+    background: var(--danger);
+}
