@@ -2953,3 +2953,425 @@ p.betaNoticeText {
 .appTeamBadge {
     max-width: 100%;
 }
+
+/* LANDSCAPE GAME TRACKER
+   iPad landscape only (at least 1024 px wide); portrait and phones are unchanged.
+   body.liveTrackerActive is set only while the live game screen is showing.
+   Five on-court players in one row under a compact team strip, so both stay on
+   screen without scrolling. script.js (fitLandscapeTracker) adds
+   .landscapeTwoColumns when wider two-column buttons still fit, and sets
+   --landscape-button-height to use any spare height. */
+@media (orientation: landscape) and (min-width: 1024px) {
+    /* Slim top bar */
+    body.liveTrackerActive .appHeader {
+        display: none;
+    }
+
+    body.liveTrackerActive .topNavButtons {
+        position: absolute;
+        top: 6px;
+        left: 12px;
+        z-index: 2;
+        margin: 0;
+    }
+
+    body.liveTrackerActive .topNavButtons .backButton {
+        height: 44px;
+        padding: 0 14px;
+    }
+
+    body.liveTrackerActive .topNavButtons .homeButton {
+        width: 44px;
+        height: 44px;
+    }
+
+    body.liveTrackerActive .appContainer {
+        width: 100%;
+        padding: 6px 12px 24px;
+    }
+
+    body.liveTrackerActive #liveGameScreen {
+        margin-top: 0;
+    }
+
+    body.liveTrackerActive .liveGameHeader {
+        align-items: center;
+        min-height: 44px;
+        margin-bottom: 4px;
+        padding: 0 0 0 176px;
+        border-radius: 0;
+        background: none;
+        color: var(--navy-dark);
+        gap: 12px;
+    }
+
+    body.liveTrackerActive .liveGameHeader > div:first-child {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    body.liveTrackerActive .liveGameLogo {
+        display: none;
+    }
+
+    body.liveTrackerActive .liveGameHeader h2 {
+        font-size: 20px;
+        white-space: nowrap;
+    }
+
+    body.liveTrackerActive #liveGameDetails {
+        margin: 0;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 14px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    body.liveTrackerActive .liveGameHeaderControls {
+        flex-direction: row;
+        align-items: center;
+        align-self: center;
+        width: auto;
+        gap: 10px;
+    }
+
+    body.liveTrackerActive .liveGameHeaderControls .editGameSetupButton {
+        width: auto;
+        min-height: 44px;
+    }
+
+    body.liveTrackerActive .liveGameHeaderControls .periodControl {
+        display: flex;
+        align-items: center;
+        width: auto;
+        min-width: 0;
+        margin-top: 0;
+        color: var(--navy-dark);
+    }
+
+    body.liveTrackerActive .liveGameHeaderControls .periodControl select {
+        width: 90px;
+        min-height: 44px;
+        padding: 4px 10px;
+        border: 2px solid var(--navy);
+    }
+
+    body.liveTrackerActive .trackerTabs {
+        margin-bottom: 6px;
+    }
+
+    body.liveTrackerActive .trackerTab,
+    body.liveTrackerActive .trackerTotal {
+        min-height: 44px;
+    }
+
+    body.liveTrackerActive #playerTrackerPanel > .trackerHeading {
+        display: none;
+    }
+
+    /* Compact team strip: tiles share the width, so fewer stats get wider buttons */
+    body.liveTrackerActive #teamStatButtons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 6px;
+    }
+
+    body.liveTrackerActive .teamStatCardGrid {
+        display: contents;
+    }
+
+    /* The reminder sits above the tiles instead of taking a grid row,
+       so unused columns can still widen the tiles. */
+    body.liveTrackerActive #teamStatButtons.hasTeamShotReminder {
+        position: relative;
+        padding-top: 18px;
+    }
+
+    body.liveTrackerActive .teamShotReminder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+        font-size: 12px;
+        line-height: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    body.liveTrackerActive .teamStatCard {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        min-height: 0;
+        border-radius: 10px;
+        box-shadow: none;
+    }
+
+    body.liveTrackerActive .teamStatCardName {
+        grid-column: 1;
+        grid-row: 1;
+        overflow: hidden;
+        padding: 4px 4px 2px 10px;
+        font-size: 12px;
+        line-height: 16px;
+        text-align: left;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    /* Short names (FG, 3PT, FT) so the shooting totals have room */
+    body.liveTrackerActive .teamStatCardName[data-short-label] {
+        font-size: 0;
+    }
+
+    body.liveTrackerActive .teamStatCardName[data-short-label]::before {
+        content: attr(data-short-label);
+        font-size: 12px;
+    }
+
+    body.liveTrackerActive .teamStatCardTotal {
+        grid-column: 2;
+        grid-row: 1;
+        padding: 4px 10px 2px 4px;
+        font-size: 16px;
+        line-height: 16px;
+        white-space: nowrap;
+    }
+
+    body.liveTrackerActive .teamStatCardTotal br {
+        display: none;
+    }
+
+    body.liveTrackerActive .teamStatCardControls {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    body.liveTrackerActive .teamStatCardControls button {
+        min-height: 44px;
+        padding: 0 2px;
+        font-size: 16px;
+    }
+
+    body.liveTrackerActive .teamStatCardControls button .teamShotTag {
+        font-size: 9px;
+        letter-spacing: 0.5px;
+    }
+
+    body.liveTrackerActive .teamStatCardControls button .teamShotTag + span {
+        font-size: 15px;
+    }
+
+    body.liveTrackerActive .transitionPointsCard {
+        grid-column: span 2;
+        border-radius: 10px;
+        box-shadow: none;
+    }
+
+    body.liveTrackerActive .transitionPointsHeader {
+        padding: 4px 10px 2px;
+        font-size: 12px;
+        line-height: 16px;
+    }
+
+    body.liveTrackerActive .transitionPointsHeader strong {
+        font-size: 16px;
+        line-height: 16px;
+    }
+
+    body.liveTrackerActive .transitionPointsButtons button {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    /* Five on-court players in one row */
+    body.liveTrackerActive .playerBench {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    body.liveTrackerActive .playerCard {
+        padding: 8px;
+        border-radius: 12px;
+        box-shadow: none;
+    }
+
+    /* Number and name get the full card width (up to two lines);
+       SUB OUT and points sit on the row below. */
+    body.liveTrackerActive .playerCardHeader {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+
+    body.liveTrackerActive .playerCardHeader > div:first-child {
+        display: -webkit-box;
+        grid-column: 1 / -1;
+        min-height: 36px;
+        overflow: hidden;
+        line-height: 18px;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    body.liveTrackerActive .playerCardNumber {
+        display: inline;
+        margin-right: 5px;
+        color: var(--navy);
+        font-size: 15px;
+    }
+
+    body.liveTrackerActive .playerCardName {
+        display: inline;
+        margin: 0;
+        font-size: 16px;
+        line-height: 18px;
+    }
+
+    body.liveTrackerActive .playerSubButton {
+        grid-column: 1;
+        grid-row: 2;
+        min-width: 0;
+        min-height: 40px;
+        padding: 0 6px;
+    }
+
+    body.liveTrackerActive .playerCardPoints {
+        grid-column: 2;
+        grid-row: 2;
+        min-width: 0;
+    }
+
+    body.liveTrackerActive .playerCardPoints strong {
+        display: inline;
+        font-size: 24px;
+    }
+
+    body.liveTrackerActive .playerCardPoints span {
+        display: inline;
+        margin-left: 2px;
+        font-size: 10px;
+    }
+
+    body.liveTrackerActive .playerCardScoring {
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+
+    body.liveTrackerActive .playerCardPointButton {
+        min-height: calc(var(--landscape-button-height, 44px) + 2px);
+    }
+
+    body.liveTrackerActive .playerCardStats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .undoSpanTwo1 {
+        grid-column: span 1;
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .undoSpanTwo2 {
+        grid-column: span 2;
+    }
+
+    body.liveTrackerActive .playerCardStats .playerCardStatButton {
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        min-height: var(--landscape-button-height, 44px);
+        padding: 2px 4px;
+        line-height: 1.1;
+    }
+
+    body.liveTrackerActive .playerCardStats .playerCardStatButton span {
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .playerCardStatButton span {
+        font-size: 12px;
+    }
+
+    body.liveTrackerActive .playerCardStats .playerCardStatButton strong {
+        min-width: 0;
+        font-size: 16px;
+        text-align: center;
+    }
+
+    /* Short labels (AST, STL, OREB...) only on the narrower three-column buttons */
+    body.liveTrackerActive .playerBench:not(.landscapeTwoColumns) .playerCardStats span[data-short-label]:not([data-short-label=""]) {
+        font-size: 0;
+    }
+
+    body.liveTrackerActive .playerBench:not(.landscapeTwoColumns) .playerCardStats span[data-short-label]:not([data-short-label=""])::before {
+        content: attr(data-short-label);
+        font-size: 11px;
+    }
+
+    body.liveTrackerActive .playerCardUndoButton {
+        min-height: var(--landscape-button-height, 44px);
+        font-size: 13px;
+    }
+
+    /* Bench: compact tiles with name, points and SUB IN */
+    body.liveTrackerActive .benchDivider {
+        margin: 2px 0 0;
+        padding: 4px 0;
+        font-size: 13px;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard {
+        padding: 6px 8px;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardScoring,
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardStats {
+        display: none;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardHeader {
+        gap: 0 6px;
+        margin: 0;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardHeader > div:first-child {
+        grid-column: 1;
+        grid-row: 1;
+        min-height: 0;
+        -webkit-line-clamp: 1;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardName {
+        font-size: 14px;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardPoints {
+        grid-column: 1;
+        grid-row: 2;
+        line-height: 1;
+        text-align: left;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerCardPoints strong {
+        font-size: 15px;
+    }
+
+    body.liveTrackerActive .benchDivider ~ .playerCard .playerSubButton {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        min-height: 44px;
+        padding: 0 10px;
+    }
+}

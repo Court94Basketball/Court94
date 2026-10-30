@@ -262,6 +262,13 @@ function showScreen(screenName) {
 
     screens[screenName].classList.add("activeScreen");
 
+    // Lets the landscape tracker layout apply only on the live game screen.
+    document.body.classList.toggle(
+        "liveTrackerActive",
+        screenName === "liveGame"
+    );
+    fitLandscapeTracker();
+
     if (screenName === "home") {
     backButton.classList.add("hidden");
     homeButton.classList.add("hidden");
@@ -999,6 +1006,8 @@ function showTrackTab() {
     document
         .getElementById("summaryTrackerPanel")
         .classList.remove("activeTrackerPanel");
+
+    fitLandscapeTracker();
 }
 
 function renderLiveGame() {
@@ -1046,6 +1055,133 @@ periodSelect.value = liveGameState.period;
     updateLiveTeamPointTotal();
     renderLastAction();
 }
+
+// LANDSCAPE TRACKER (iPad landscape only — portrait is unchanged)
+// Short labels for the narrower landscape stat buttons.
+const landscapeStatLabels = {
+    assists: "AST",
+    steals: "STL",
+    blocks: "BLK",
+    fouls: "FOUL",
+    offensiveRebounds: "OREB",
+    defensiveRebounds: "DREB",
+    turnovers: "TO"
+};
+
+// Team stat names too long for the landscape team strip.
+const landscapeTeamStatLabels = {
+    offensiveRebounds: "Off Rebounds",
+    defensiveRebounds: "Def Rebounds",
+    forcedTurnovers: "Forced TO"
+};
+
+let landscapeFit = null;
+
+function isLandscapeTracker() {
+    return (
+        document.body.classList.contains("liveTrackerActive") &&
+        window.matchMedia(
+            "(orientation: landscape) and (min-width: 1024px)"
+        ).matches
+    );
+}
+
+// Display only. Uses two button columns (wider buttons) when the five
+// on-court cards still fit on screen, otherwise three. Any height left
+// over makes the buttons taller, as long as the bench stays on screen too.
+function fitLandscapeTracker() {
+    const bench = document.getElementById("playerBench");
+
+    if (!bench) {
+        return;
+    }
+
+    if (!isLandscapeTracker()) {
+        bench.classList.remove("landscapeTwoColumns");
+        bench.style.removeProperty("--landscape-button-height");
+        landscapeFit = null;
+        return;
+    }
+
+    const cards = [...bench.querySelectorAll(".playerCard")];
+    const onCourtCards = cards.slice(0, 5);
+
+    // Nothing to measure while the cards are hidden (e.g. SUMMARY tab).
+    if (onCourtCards.length === 0 || !onCourtCards[0].offsetParent) {
+        return;
+    }
+
+    const statButtonCount =
+        onCourtCards[0].querySelectorAll(".playerCardStats > button").length;
+
+    const pointButtonCount =
+        onCourtCards[0].querySelectorAll(".playerCardPointButton").length;
+
+    const setup = [
+        statButtonCount,
+        pointButtonCount,
+        document.querySelectorAll("#teamStatButtons button").length,
+        cards.length
+    ].join("|");
+
+    // Re-measure only when the stats, roster or screen size change — not on
+    // every tap, and not for small changes in Safari's toolbar height.
+    if (
+        landscapeFit &&
+        landscapeFit.setup === setup &&
+        landscapeFit.width === window.innerWidth &&
+        Math.abs(landscapeFit.height - window.innerHeight) < 120
+    ) {
+        return;
+    }
+
+    landscapeFit = {
+        setup,
+        width: window.innerWidth,
+        height: window.innerHeight
+    };
+
+    const bottomOf = (elements) =>
+        Math.max(
+            ...elements.map(
+                (element) =>
+                    element.getBoundingClientRect().bottom + window.scrollY
+            )
+        );
+
+    const available = window.innerHeight - 8;
+
+    bench.style.setProperty("--landscape-button-height", "44px");
+    bench.classList.add("landscapeTwoColumns");
+
+    if (bottomOf(onCourtCards) > available) {
+        bench.classList.remove("landscapeTwoColumns");
+    }
+
+    const columns =
+        bench.classList.contains("landscapeTwoColumns") ? 2 : 3;
+
+    // Rows of buttons in a card: points, stats, and the row Undo ends.
+    const buttonRows =
+        (pointButtonCount > 0 ? 1 : 0) +
+        Math.floor((statButtonCount - 1) / columns) + 1;
+
+    const spare = available - bottomOf(cards);
+
+    if (spare > 0) {
+        const buttonHeight =
+            Math.min(64, 44 + Math.floor(spare / buttonRows));
+
+        bench.style.setProperty(
+            "--landscape-button-height",
+            `${buttonHeight}px`
+        );
+    }
+}
+
+window.addEventListener("resize", () => {
+    fitLandscapeTracker();
+});
 
 function renderPlayerBench() {
     connectPlayerCardButtons();
@@ -1129,6 +1265,10 @@ const sortedRoster =
             const undoSpan =
                 3 - (cardButtonCount % 3);
 
+            // Same rule for the two-column landscape cards.
+            const undoSpanTwo =
+                2 - (cardButtonCount % 2);
+
             const statButtons =
                 cardStats
                     .map((stat) => {
@@ -1141,7 +1281,7 @@ const sortedRoster =
     data-card-player-stat="${statKey}"
     data-card-player-id="${player.id}"
 >
-    <span>${stat.shortName || stat.name}</span>
+    <span data-short-label="${landscapeStatLabels[statKey] || ""}">${stat.shortName || stat.name}</span>
 
     <strong>
         ${getPlayerStatTotal(
@@ -1235,7 +1375,7 @@ const sortedRoster =
                         ${statButtons}
 
                         <button
-                            class="playerCardUndoButton undoSpan${undoSpan}"
+                            class="playerCardUndoButton undoSpan${undoSpan} undoSpanTwo${undoSpanTwo}"
                             type="button"
                             data-card-player-undo="${player.id}"
                         >
@@ -1249,6 +1389,8 @@ ${index === 4 ? `<div class="benchDivider">BENCH</div>` : ""}
 `;
         })
         .join("");
+
+    fitLandscapeTracker();
 }
 
 function updateLiveTeamPointTotal() {
@@ -1690,7 +1832,11 @@ const hasFreeThrows =
                     class="teamStatCard ${colorClass}"
                     data-team-stat-card="${statKey}"
                 >
-                    <div class="teamStatCardName">
+                    <div class="teamStatCardName"${
+                        landscapeTeamStatLabels[statKey]
+                            ? ` data-short-label="${landscapeTeamStatLabels[statKey]}"`
+                            : ""
+                    }>
                         ${stat.name}
                     </div>
 
@@ -1793,7 +1939,7 @@ const hasFreeThrows =
 
         return `
             <div class="teamStatCard fieldGoalCard">
-                <div class="teamStatCardName">
+                <div class="teamStatCardName" data-short-label="FG">
                     FGM, FGA AND FG%
                 </div>
 
@@ -1851,7 +1997,7 @@ const threePointerCard = hasThreePointers
 
         return `
             <div class="teamStatCard teamStatBlue threePointerCard">
-                <div class="teamStatCardName">
+                <div class="teamStatCardName" data-short-label="3PT">
                     3PM, 3PA AND 3P%
                 </div>
 
@@ -1909,7 +2055,7 @@ const threePointerCard = hasThreePointers
 
         return `
             <div class="teamStatCard freeThrowCard">
-                <div class="teamStatCardName">
+                <div class="teamStatCardName" data-short-label="FT">
                     FTM, FTA AND FT%
                 </div>
 
@@ -1966,6 +2112,14 @@ ${freeThrowCard}
 
         ${transitionCard}
     `;
+
+    // Lets the landscape team strip place the reminder above the tiles.
+    container.classList.toggle(
+        "hasTeamShotReminder",
+        Boolean(teamShotReminder)
+    );
+
+    fitLandscapeTracker();
 
     document
         .querySelectorAll("[data-team-stat-plus]")
