@@ -3261,6 +3261,7 @@ p.betaNoticeText {
     }
 
     body.liveTrackerActive .playerCardScoring {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
         margin-bottom: 6px;
     }
@@ -3269,21 +3270,34 @@ p.betaNoticeText {
         min-height: calc(var(--landscape-button-height, 44px) + 2px);
     }
 
+    /* A six-column grid with the same gap as +1/+2/+3. Each miss button spans
+       two columns, which is exactly one point button's width, so FT / 2PT /
+       3PT Miss always sit directly under +1 / +2 / +3. The other stats span
+       two columns (three across) or three (two across, .landscapeTwoColumns),
+       so the adaptive layout is unchanged for them. */
     body.liveTrackerActive .playerCardStats {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 6px;
     }
 
-    body.liveTrackerActive .landscapeTwoColumns .playerCardStats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .undoSpanTwo1 {
-        grid-column: span 1;
-    }
-
-    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .undoSpanTwo2 {
+    body.liveTrackerActive .playerCardStats > * {
         grid-column: span 2;
+    }
+
+    body.liveTrackerActive .playerCardStats > .undoSpan2 {
+        grid-column: span 4;
+    }
+
+    body.liveTrackerActive .playerCardStats > .undoSpan3 {
+        grid-column: span 6;
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats > :not(.playerCardMissButton) {
+        grid-column: span 3;
+    }
+
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats > .undoSpanTwo2 {
+        grid-column: span 6;
     }
 
     body.liveTrackerActive .playerCardStats .playerCardStatButton {
@@ -3302,6 +3316,11 @@ p.betaNoticeText {
 
     body.liveTrackerActive .landscapeTwoColumns .playerCardStats .playerCardStatButton span {
         font-size: 12px;
+    }
+
+    /* Miss buttons keep the three-across label size. */
+    body.liveTrackerActive .landscapeTwoColumns .playerCardStats .playerCardMissButton span {
+        font-size: 11px;
     }
 
     body.liveTrackerActive .playerCardStats .playerCardStatButton strong {

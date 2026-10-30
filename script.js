@@ -1152,19 +1152,28 @@ function fitLandscapeTracker() {
     const available = window.innerHeight - 8;
 
     bench.style.setProperty("--landscape-button-height", "44px");
+    // Two wider columns (full labels) when the five fit with a spare row of
+    // buttons (44px + 6px gap). The miss buttons' own row already saves that
+    // row, so screens choose the same columns as before and the bench never
+    // ends up lower; the saved height goes to taller buttons instead.
     bench.classList.add("landscapeTwoColumns");
 
-    if (bottomOf(onCourtCards) > available) {
+    if (bottomOf(onCourtCards) > available - 50) {
         bench.classList.remove("landscapeTwoColumns");
     }
 
     const columns =
         bench.classList.contains("landscapeTwoColumns") ? 2 : 3;
 
-    // Rows of buttons in a card: points, stats, and the row Undo ends.
+    // Rows of buttons in a card: points, the miss row (always three across,
+    // under +1/+2/+3), then the other stats and the row Undo ends.
+    const missButtonCount =
+        onCourtCards[0].querySelectorAll(".playerCardStats > .playerCardMissButton").length;
+
     const buttonRows =
         (pointButtonCount > 0 ? 1 : 0) +
-        Math.floor((statButtonCount - 1) / columns) + 1;
+        (missButtonCount > 0 ? 1 : 0) +
+        Math.floor((statButtonCount - missButtonCount - 1) / columns) + 1;
 
     const spare = available - bottomOf(cards);
 
@@ -1265,9 +1274,10 @@ const sortedRoster =
             const undoSpan =
                 3 - (cardButtonCount % 3);
 
-            // Same rule for the two-column landscape cards.
+            // Same rule for the two-column landscape cards, where the miss
+            // buttons have their own row under +1/+2/+3.
             const undoSpanTwo =
-                2 - (cardButtonCount % 2);
+                2 - (cardStats.length % 2);
 
             const statButtons =
                 cardStats
