@@ -134,6 +134,14 @@ function hasIndividualShooting(statKeys) {
     );
 }
 
+// A stat's full name for sorting (unknown keys sort last).
+function getStatName(statList, statKey) {
+    return (
+        statList.find((stat) => stat.key === statKey)?.name ||
+        "￿"
+    );
+}
+
 // Team-stat choices that switch a feature on instead of adding a team stat.
 // They aren't in teamStats, so team stat cards and tables skip them.
 const teamStatSettings = [
@@ -1167,14 +1175,22 @@ const sortedRoster = [...onCourtPlayers, ...benchPlayers];
                     "points"
                 );
 
-            // Card stats always appear in the standard order
-            // (Assists, Steals, Blocks, Fouls, Off Rebs, Def Rebs, Turnovers).
+            // Card stats are alphabetical by full name (Assists, Blocks,
+            // Defensive Rebounds, Fouls, Offensive Rebounds, Steals,
+            // Turnovers). +1/+2/+3 and the miss buttons stay above them and
+            // Undo stays last.
             const cardStats =
-                playerStats.filter(
-                    (stat) =>
-                        isPlayerCounterStat(stat.key) &&
-                        uniquePlayerStats.includes(stat.key)
-                );
+                playerStats
+                    .filter(
+                        (stat) =>
+                            isPlayerCounterStat(stat.key) &&
+                            uniquePlayerStats.includes(stat.key)
+                    )
+                    .sort((statA, statB) =>
+                        statA.name.localeCompare(statB.name, undefined, {
+                            sensitivity: "base"
+                        })
+                    );
 
             // Gray miss buttons show each player's misses for that shot type.
             const missButtons =
@@ -1731,6 +1747,8 @@ function renderTeamStatButtons() {
     )
 ];
 
+    // Single-count cards alphabetical by name. The shooting cards (FG, 3PT,
+    // FT) follow as a group, and Transition is always last.
     const regularStats =
     uniqueTeamStats.filter(
         (statKey) =>
@@ -1738,6 +1756,12 @@ function renderTeamStatButtons() {
             statKey !== "fieldGoals" &&
             statKey !== "threePointers" &&
             statKey !== "freeThrows"
+    ).sort((keyA, keyB) =>
+        getStatName(teamStats, keyA).localeCompare(
+            getStatName(teamStats, keyB),
+            undefined,
+            { sensitivity: "base" }
+        )
     );
 
 const hasFieldGoals =
@@ -1766,8 +1790,11 @@ const hasFreeThrows =
                 return "";
             }
 
+            // Opponent stats are red, like the opponent scoring buttons.
             const colorClass =
-                cardColors[index % cardColors.length];
+                statKey === "opponentOffensiveRebounds"
+                    ? "teamStatOpponent"
+                    : cardColors[index % cardColors.length];
 
             return `
                 <div

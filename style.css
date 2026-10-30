@@ -3127,3 +3127,8 @@ p.betaNoticeText {
     color: var(--muted);
     font-size: 13px;
 }
+
+/* Opponent team stats (Opp. Off Rebs) share the opponent scoring red. */
+.teamStatOpponent {
+    background: var(--danger);
+}
