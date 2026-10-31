@@ -3108,7 +3108,8 @@ function getSeasonTeamStatAverage(teamGames, statKey) {
             statKey,
             average:
                 `${(made / gameCount).toFixed(1)} / ` +
-                `${(attempted / gameCount).toFixed(1)} · ${percentage}`,
+                `${(attempted / gameCount).toFixed(1)}`,
+            percentage,
             gamesLabel
         };
     }
@@ -7205,20 +7206,18 @@ if (!teamId || !selectedSeason) {
                                     );
 
                             return `
-                                <div class="reportAverageCard">
+                                <div class="reportAverageCard${stat.percentage ? " reportAverageShooting" : ""}">
                                     <span class="reportAverageLabel">
                                         ${statLabel}
                                     </span>
 
-                                    <strong class="reportAverageValue">
-                                        ${stat.average}
-                                    </strong>
-
-                                    ${
-                                        stat.gamesLabel
-                                            ? `<small class="reportAverageGames">${stat.gamesLabel}</small>`
+                                    <strong class="reportAverageValue"><span class="reportAverageMain">${stat.average}</span><span class="reportAveragePercent">${
+                                        stat.percentage
+                                            ? `<span class="reportAverageDot"> · </span>${stat.percentage}`
                                             : ""
-                                    }
+                                    }</span></strong>
+
+                                    <small class="reportAverageGames">${stat.gamesLabel}</small>
                                 </div>
                             `;
                         })

@@ -2258,14 +2258,20 @@ color: white;
     font-size: 21px;
 }
 
+/* Team Averages: every card in a row shares the same label, number and
+   games-note lines, so they line up across the row. */
 .reportAveragesGrid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 14px;
+    row-gap: 0;
 }
 
 .reportAverageCard {
-    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+    padding: 16px 10px;
     background: #f7f9fc;
     border: 1px solid #dbe3ec;
     border-radius: 10px;
@@ -2273,23 +2279,76 @@ color: white;
 }
 
 .reportAverageLabel {
-    display: block;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 2.6em;
     margin-bottom: 6px;
     color: #64748b;
     font-size: 14px;
     font-weight: 700;
+    line-height: 1.3;
 }
 
 .reportAverageValue {
     display: block;
+    align-self: stretch;
     color: #082b55;
     font-size: 24px;
     font-weight: 800;
+    line-height: 1.25;
+}
+
+.reportAverageMain,
+.reportAveragePercent {
+    display: block;
+    white-space: nowrap;
+}
+
+.reportAveragePercent {
+    font-size: 19px;
+}
+
+/* The " · " stays in the text but the percentage gets its own line. */
+.reportAverageDot {
+    display: none;
+}
+
+.reportAverageCard .reportAverageGames {
+    margin-top: auto;
+    padding-top: 6px;
+    white-space: nowrap;
+}
+
+@supports (grid-template-rows: subgrid) {
+    .reportAverageCard {
+        display: grid;
+        grid-row: span 3;
+        grid-template-rows: subgrid;
+        row-gap: 0;
+    }
+
+    .reportAverageValue {
+        align-self: start;
+    }
+
+    .reportAverageCard .reportAverageGames {
+        align-self: end;
+    }
 }
 
 @media (max-width: 800px) {
     .reportAveragesGrid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Phones: shooting cards are too wide for half the screen, so they take a
+   full row each, after the other cards. */
+@media (max-width: 520px) {
+    .reportAverageShooting {
+        grid-column: 1 / -1;
+        order: 1;
     }
 }
 
