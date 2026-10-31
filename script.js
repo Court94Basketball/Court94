@@ -5455,9 +5455,64 @@ document.getElementById(
         ? getTrackedOpponentPoints(liveGameState)
         : "";
 
+// Scores typed on this summary before a reload come back as typed.
+const summaryDraft = liveGameState.summaryDraft;
+
+if (summaryDraft) {
+    document.getElementById("summaryTeamScore").value =
+        summaryDraft.teamScore;
+    document.getElementById("summaryOpponentScore").value =
+        summaryDraft.opponentScore;
+}
+
+// The saved game's ID is fixed now, so a save that was interrupted and
+// tried again can never add the same game twice. summaryOpen lets a reload
+// come back to this summary.
+if (!liveGameState.completedGameId) {
+    liveGameState.completedGameId = crypto.randomUUID();
+}
+
+liveGameState.summaryOpen = true;
+saveLiveGameState();
+
 renderEndOfGameLineups();
 
     showScreen("gameSummary");
+}
+
+// Back to Game from the end-of-game summary: the summary is closed and the
+// scores are worked out again next time Finish Game is tapped.
+function closeGameSummary() {
+    if (liveGameState) {
+        liveGameState.summaryOpen = false;
+        delete liveGameState.summaryDraft;
+        saveLiveGameState();
+    }
+
+    showScreen("liveGame");
+}
+
+// A blank final score is never quietly saved as 0. It uses the tracked
+// total when that side's scoring was tracked for the whole game, and
+// otherwise asks. Returns null if the coach wants to fill it in.
+function getFinalScore(inputId, trackedScore, label) {
+    const input = document.getElementById(inputId);
+    const value = input.value.trim();
+
+    if (value !== "") {
+        return Number(value) || 0;
+    }
+
+    if (trackedScore !== null) {
+        return trackedScore;
+    }
+
+    if (confirm(`The ${label} score is blank. Save it as 0?`)) {
+        return 0;
+    }
+
+    input.focus();
+    return null;
 }
 
 function openSavedGameSummary(gameId) {
@@ -5847,22 +5902,41 @@ function saveCompletedGame() {
         return;
     }
 
-    const teamScore =
-        Number(
-            document.getElementById(
-                "summaryTeamScore"
-            ).value
-        ) || 0;
+    const gameId = liveGameState.completedGameId || crypto.randomUUID();
 
-    const opponentScore =
-        Number(
-            document.getElementById(
-                "summaryOpponentScore"
-            ).value
-        ) || 0;
+    // Already saved (a save that finished just before the app was closed):
+    // never add it a second time.
+    if (savedGames.some((game) => game.id === gameId)) {
+        finishSavedGame(team);
+        return;
+    }
+
+    const teamScore = getFinalScore(
+        "summaryTeamScore",
+        getScoringCoverage(liveGameState, "points") === "full"
+            ? getRecordedTeamPoints(liveGameState)
+            : null,
+        `${team.teamName}`
+    );
+
+    if (teamScore === null) {
+        return;
+    }
+
+    const opponentScore = getFinalScore(
+        "summaryOpponentScore",
+        getScoringCoverage(liveGameState, "opponentScoring") === "full"
+            ? getTrackedOpponentPoints(liveGameState)
+            : null,
+        "opponent's"
+    );
+
+    if (opponentScore === null) {
+        return;
+    }
 
     const completedGame = {
-    id: crypto.randomUUID(),
+    id: gameId,
     teamId: team.id,
     season: team.season,
     opponent: liveGameState.opponent,
@@ -5919,18 +5993,41 @@ participationTracked:
         completedAt: new Date().toISOString()
     };
 
-    savedGames.push(completedGame);
+    // Save, then read it back. Only a confirmed save clears the game in
+    // progress; if saving fails, the game stays here and nothing is lost.
+    const updatedGames = [...savedGames, completedGame];
+    const updatedGamesText = JSON.stringify(updatedGames);
 
-    localStorage.setItem(
-        GAMES_STORAGE_KEY,
-        JSON.stringify(savedGames)
-    );
+    try {
+        localStorage.setItem(GAMES_STORAGE_KEY, updatedGamesText);
 
+        if (localStorage.getItem(GAMES_STORAGE_KEY) !== updatedGamesText) {
+            throw new Error("Saved games didn't read back correctly.");
+        }
+    } catch (error) {
+        console.error("Court94 could not save the game:", error);
+
+        alert(
+            "Court94 couldn't save this game, so it is still here and nothing was lost.\n\n" +
+            "Please try Save Game again. If it keeps failing, go to Settings and download a backup, which includes this game in progress."
+        );
+
+        return;
+    }
+
+    savedGames = updatedGames;
+    finishSavedGame(team);
+}
+
+// After a confirmed save: clear the game in progress (in memory and its
+// on-device copy) and go to the team.
+function finishSavedGame(team) {
     liveGameState = null;
     currentGameSetup = null;
     liveActionHistory = [];
     selectedLivePlayerId = null;
 
+    saveLiveGameState();
     openTeamDetails(team.id);
 }
 function renderLastAction() {
@@ -8274,7 +8371,10 @@ document
 
 document
     .getElementById("undoLastActionButton")
-    .addEventListener("click", undoLastAction);
+    .addEventListener("click", () => {
+        undoLastAction();
+        saveLiveGameState();
+    });
 
 // Red opponent scoring controls (shown only while Opponent Scoring is on).
 document
@@ -8297,6 +8397,24 @@ document
             renderEndOfGameLineups();
         }
     });
+
+// Scores typed on the end-of-game summary are kept with the game in
+// progress, so a reload brings them back.
+["summaryTeamScore", "summaryOpponentScore"].forEach((inputId) => {
+    document.getElementById(inputId).addEventListener("input", () => {
+        if (viewingSavedGame || !liveGameState?.summaryOpen) {
+            return;
+        }
+
+        liveGameState.summaryDraft = {
+            teamScore: document.getElementById("summaryTeamScore").value,
+            opponentScore:
+                document.getElementById("summaryOpponentScore").value
+        };
+
+        saveLiveGameState();
+    });
+});
 
 document
     document
@@ -8349,6 +8467,8 @@ document
                 ][player.id].points = 0;
             });
         }
+
+        saveLiveGameState();
     });
 document
     document
@@ -8382,7 +8502,7 @@ document
             return;
         }
 
-        showScreen("liveGame");
+        closeGameSummary();
     });
 
     homeButton.addEventListener("click", () => {
@@ -8392,6 +8512,21 @@ document
     if (activeScreen?.id === "liveGameScreen") {
         const confirmed = window.confirm(
             "Leave this game?\n\nIf you continue, all unsaved game stats will be lost and you will return to Home."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    // The finished game isn't saved until Save Game is tapped.
+    if (
+        activeScreen?.id === "gameSummaryScreen" &&
+        !viewingSavedGame &&
+        liveGameState
+    ) {
+        const confirmed = window.confirm(
+            "Leave without saving this game?\n\nThis game hasn't been saved yet. If you continue, all of its stats will be lost and you will return to Home.\n\nTap Cancel, then Save Game, to keep it."
         );
 
         if (!confirmed) {
@@ -8434,7 +8569,7 @@ backButton.addEventListener("click", () => {
     }
 
     if (activeScreen.id === "gameSummaryScreen") {
-    showScreen("liveGame");
+    closeGameSummary();
     return;
     }
 
@@ -8552,7 +8687,20 @@ if (savedLiveGameRecovery) {
     }
 }
 
-const savedScreen =
+// A game in progress that was already saved (the app closed right after
+// Save Game) is not a game in progress any more.
+if (
+    liveGameState?.completedGameId &&
+    savedGames.some((game) => game.id === liveGameState.completedGameId)
+) {
+    liveGameState = null;
+    liveActionHistory = [];
+    selectedLivePlayerId = null;
+    currentGameSetup = null;
+    saveLiveGameState();
+}
+
+let savedScreen =
     localStorage.getItem("court94CurrentScreen");
 
     if (
@@ -8561,6 +8709,19 @@ const savedScreen =
     selectedTeamId
 ) {
     renderLiveGame();
+}
+
+// Reopened on the end-of-game summary: rebuild it from the game (scores,
+// stats and anything typed), with the tracker ready behind it for Back to
+// Game. A summary that can't be rebuilt (e.g. a past game being viewed)
+// opens Home instead of an empty summary.
+if (savedScreen === "gameSummary") {
+    if (liveGameState?.summaryOpen && getSelectedTeam()) {
+        renderLiveGame();
+        openGameSummary();
+    } else {
+        savedScreen = "home";
+    }
 }
 
 if (savedScreen === "games") {
