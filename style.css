@@ -3628,6 +3628,109 @@ p.betaNoticeText {
     font-size: 13px;
 }
 
+/* Season Lineup Plus/Minus (Reports) */
+.reportSeasonLineups {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid #dbe3ec;
+}
+
+.reportSeasonLineups h4 {
+    margin: 0;
+    color: #082b55;
+    font-size: 21px;
+}
+
+.seasonLineupSwitches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.reportSeasonLineups[data-view="lineups"] [data-season-lineup-view="lineups"],
+.reportSeasonLineups[data-view="players"] [data-season-lineup-view="players"],
+.reportSeasonLineups[data-games="whole"] [data-season-lineup-games="whole"],
+.reportSeasonLineups[data-games="all"] [data-season-lineup-games="all"] {
+    background: var(--navy);
+    color: white;
+}
+
+.seasonLineupGpNote {
+    margin: 0 0 12px;
+}
+
+.seasonLineupGp small {
+    display: block;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+/* Rows that use partial-game data get an amber edge. */
+.seasonLineupPartialRow td:first-child {
+    box-shadow: inset 4px 0 0 #d97706;
+}
+
+.seasonLineupMoreButton {
+    min-height: 44px;
+    margin-top: 12px;
+    padding: 0 18px;
+    border: 2px solid var(--navy);
+    border-radius: 10px;
+    background: white;
+    color: var(--navy);
+    font-size: 15px;
+    font-weight: 900;
+    touch-action: manipulation;
+}
+
+@media (max-width: 520px) {
+    .seasonLineupSwitches .seasonViewSwitch {
+        flex: 1 1 100%;
+    }
+
+    .seasonLineupSwitches .seasonViewSwitch button {
+        flex: 1;
+        min-width: 0;
+        padding: 0 8px;
+    }
+
+    .boxScoreTable.seasonLineupTable th,
+    .boxScoreTable.seasonLineupTable td {
+        font-size: 13px;
+    }
+
+    .boxScoreTable.seasonLineupTable th:not(:first-child),
+    .boxScoreTable.seasonLineupTable td:not(:first-child) {
+        width: 34px;
+        padding: 10px 2px;
+    }
+
+    /* Room for the "1 partial" note under GP. */
+    .boxScoreTable.seasonLineupTable th:nth-child(2),
+    .boxScoreTable.seasonLineupTable td:nth-child(2) {
+        width: 46px;
+    }
+
+    .boxScoreTable.seasonLineupTable th:first-child,
+    .boxScoreTable.seasonLineupTable td:first-child {
+        padding: 10px 6px 10px 8px;
+    }
+
+    /* One player per line; a long name wraps instead of widening the table. */
+    .seasonLineupTable .lineupPlayersCell {
+        min-width: 0;
+    }
+
+    .seasonLineupTable .lineupPlayer {
+        display: block;
+        margin-right: 0;
+        white-space: normal;
+    }
+}
+
 /* Opponent team stats (Opp. Off Rebs) share the opponent scoring red. */
 .teamStatOpponent {
     background: var(--danger);

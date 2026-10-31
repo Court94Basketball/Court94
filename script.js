@@ -3961,6 +3961,415 @@ function renderEndOfGameLineups() {
     );
 }
 
+// ---------- Season lineup plus/minus (Reports) ----------
+
+// Season Lineup Plus/Minus choices, remembered while the app is open.
+let seasonLineupView = "lineups";
+let seasonLineupIncludePartial = false;
+let seasonLineupShowAll = false;
+
+// The team and games the section was last built for, so the switches can
+// rebuild just this section.
+let seasonLineupContext = null;
+
+const SEASON_LINEUP_LIMIT = 10;
+
+// Season totals are the sum of each game's own lineup report
+// (getLineupTotals), so they always match the individual game reports.
+// Only games where both teams' scoring was tracked count: whole games
+// always, partial games only when included. Points Allowed-only games and
+// games without lineup data never count. GP is the number of distinct games
+// with at least one counted basket while that lineup or player was on the
+// court. Lineups are matched by their player IDs, in any order.
+function getSeasonLineupTotals(teamGames, includePartial) {
+    const games = {
+        whole: [],
+        partial: [],
+        pointsAllowedOnly: [],
+        noData: [],
+        mismatched: []
+    };
+
+    const lineups = new Map();
+    const players = new Map();
+
+    const addRow = (map, key, details, row, isPartial) => {
+        if (!map.has(key)) {
+            map.set(key, {
+                ...details,
+                games: 0,
+                partialGames: 0,
+                pointsFor: 0,
+                pointsAgainst: 0
+            });
+        }
+
+        const total = map.get(key);
+
+        total.games += 1;
+        total.partialGames += isPartial ? 1 : 0;
+        total.pointsFor += row.pointsFor;
+        total.pointsAgainst += row.pointsAgainst;
+    };
+
+    teamGames.forEach((game) => {
+        const mode = getLineupReportMode(game);
+
+        if (mode === "none") {
+            games.noData.push(game);
+            return;
+        }
+
+        if (mode === "pointsAllowed") {
+            games.pointsAllowedOnly.push(game);
+            return;
+        }
+
+        const isPartial = getLineupReportCoverage(game, mode) !== "full";
+
+        games[isPartial ? "partial" : "whole"].push(game);
+
+        if (isPartial && !includePartial) {
+            return;
+        }
+
+        if (
+            !isPartial &&
+            (getRecordedTeamPoints(game) !== (Number(game.teamScore) || 0) ||
+                getTrackedOpponentPoints(game) !==
+                    (Number(game.opponentScore) || 0))
+        ) {
+            games.mismatched.push(game);
+        }
+
+        const totals = getLineupTotals(game, "plusMinus");
+
+        // One entry per distinct five in this game, so a lineup that comes
+        // back later in the same game still counts as one game.
+        const gameLineups = new Map();
+
+        totals.lineups.forEach((row) => {
+            const playerIds = [...new Set(row.playerIds.map(String))].sort();
+            const key = playerIds.join("|");
+            const gameRow = gameLineups.get(key) || {
+                playerIds,
+                pointsFor: 0,
+                pointsAgainst: 0
+            };
+
+            gameRow.pointsFor += row.pointsFor;
+            gameRow.pointsAgainst += row.pointsAgainst;
+            gameLineups.set(key, gameRow);
+        });
+
+        gameLineups.forEach((row, key) =>
+            addRow(lineups, key, { playerIds: row.playerIds }, row, isPartial)
+        );
+
+        totals.players.forEach((row) =>
+            addRow(
+                players,
+                String(row.playerId),
+                { playerId: String(row.playerId) },
+                row,
+                isPartial
+            )
+        );
+    });
+
+    return {
+        games,
+        lineups: [...lineups.values()],
+        players: [...players.values()]
+    };
+}
+
+function getSeasonLineupGameLabel(game) {
+    return `vs ${game.opponent || "Opponent"}${game.gameDate ? ` (${game.gameDate})` : ""}`;
+}
+
+function renderSeasonLineupSection(teamGames, team, seasonName) {
+    seasonLineupContext = { teamGames, team, season: seasonName };
+
+    const season = getSeasonLineupTotals(
+        teamGames,
+        seasonLineupIncludePartial
+    );
+
+    const { games } = season;
+    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+    const rosterById = new Map(
+        (team.roster || []).map((player) => [String(player.id), player])
+    );
+
+    // Players no longer on the roster keep their own row, told apart by a
+    // letter that stays the same whichever games are included.
+    const removedIds = [
+        ...new Set(
+            [...games.whole, ...games.partial].flatMap((game) =>
+                (game.scoringLog?.lineups || []).flat().map(String)
+            )
+        )
+    ]
+        .filter((id) => !rosterById.has(id))
+        .sort();
+
+    const playerLabel = (playerId) => {
+        const player = rosterById.get(String(playerId));
+
+        if (player) {
+            return `#${player.number || "—"} ${player.name || "Unnamed"}`;
+        }
+
+        return removedIds.length > 1
+            ? `Removed player ${String.fromCharCode(65 + removedIds.indexOf(String(playerId)))}`
+            : "Removed player";
+    };
+
+    // Rostered players by first name; removed players after them.
+    const comparePlayerIds = (a, b) => {
+        const playerA = rosterById.get(String(a));
+        const playerB = rosterById.get(String(b));
+
+        if (playerA && playerB) {
+            return comparePlayersByFirstName(playerA, playerB);
+        }
+
+        if (playerA || playerB) {
+            return playerA ? -1 : 1;
+        }
+
+        return String(a).localeCompare(String(b));
+    };
+
+    // Best plus/minus first; ties by PF, then GP, then players' names.
+    const byPlusMinus = (a, b) =>
+        (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) ||
+        b.pointsFor - a.pointsFor ||
+        b.games - a.games;
+
+    const compareLineupNames = (a, b) => {
+        for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+            if (a[index] === undefined || b[index] === undefined) {
+                return a[index] === undefined ? -1 : 1;
+            }
+
+            const result = comparePlayerIds(a[index], b[index]);
+
+            if (result) {
+                return result;
+            }
+        }
+
+        return 0;
+    };
+
+    const lineups = season.lineups
+        .map((row) => ({
+            ...row,
+            playerIds: [...row.playerIds].sort(comparePlayerIds)
+        }))
+        .sort((a, b) =>
+            byPlusMinus(a, b) || compareLineupNames(a.playerIds, b.playerIds)
+        );
+
+    const players = [...season.players].sort(
+        (a, b) => byPlusMinus(a, b) || comparePlayerIds(a.playerId, b.playerId)
+    );
+
+    // What the numbers are based on, and what was left out.
+    const counted = seasonLineupIncludePartial
+        ? games.whole.length + games.partial.length
+        : games.whole.length;
+
+    const basedOn = seasonLineupIncludePartial && games.partial.length
+        ? `Based on ${plural(games.whole.length, "whole game")} and ${plural(games.partial.length, "partial game")}.`
+        : `Based on ${plural(games.whole.length, "whole game")}.`;
+
+    const leftOut = [
+        !seasonLineupIncludePartial && games.partial.length
+            ? `${plural(games.partial.length, "partial game")} (tap Include partial games to add ${games.partial.length === 1 ? "it" : "them"})`
+            : "",
+        games.pointsAllowedOnly.length
+            ? `${plural(games.pointsAllowedOnly.length, "game")} with Points Allowed only (Points was off, so there's no PF or +/−)`
+            : "",
+        games.noData.length
+            ? `${plural(games.noData.length, "game")} without lineup data (Opponent Scoring was off)`
+            : ""
+    ].filter(Boolean);
+
+    const notes = [
+        renderLineupNote(
+            games.whole.length ? "Info" : "Warn",
+            `${basedOn}${leftOut.length ? ` Not included: ${leftOut.join("; ")}.` : ""}`
+        )
+    ];
+
+    if (seasonLineupIncludePartial && games.partial.length) {
+        notes.push(renderLineupNote(
+            "Warn",
+            `<strong>Partial games included:</strong> ${games.partial.map(getSeasonLineupGameLabel).join(", ")}. From ${games.partial.length === 1 ? "that game" : "those games"}, only baskets recorded while both teams' scoring was tracked are counted. Rows that use partial-game data have an amber edge and say how many of their games were partial under GP.`
+        ));
+    }
+
+    if (games.mismatched.length) {
+        notes.push(renderLineupNote(
+            "Warn",
+            `<strong>Recorded points don't match the final score in ${plural(games.mismatched.length, "whole game")}:</strong> ` +
+                games.mismatched
+                    .map((game) =>
+                        `${getSeasonLineupGameLabel(game)}, recorded ${getRecordedTeamPoints(game)}–${getTrackedOpponentPoints(game)}, final ${Number(game.teamScore) || 0}–${Number(game.opponentScore) || 0}`
+                    )
+                    .join("; ") +
+                (games.mismatched.length === 1
+                    ? ". This game is included; its lineup numbers use the recorded baskets only."
+                    : ". These games are included; their lineup numbers use the recorded baskets only.")
+        ));
+    }
+
+    const gpCell = (row) => `
+        <td class="seasonLineupGp">
+            ${row.games}
+            ${row.partialGames ? `<small class="seasonLineupPartial">${row.partialGames} partial</small>` : ""}
+        </td>
+    `;
+
+    const valueCells = (row) => `
+        ${gpCell(row)}
+        <td>${row.pointsFor}</td>
+        <td>${row.pointsAgainst}</td>
+        <td class="plusMinusCell">${formatPlusMinus(row.pointsFor - row.pointsAgainst)}</td>
+    `;
+
+    const valueHeads = "<th>GP</th><th>PF</th><th>PA</th><th>+/−</th>";
+
+    const shownLineups = seasonLineupShowAll
+        ? lineups
+        : lineups.slice(0, SEASON_LINEUP_LIMIT);
+
+    const lineupTable = `
+        <div class="boxScoreWrap">
+            <table class="boxScoreTable lineupTable seasonLineupTable">
+                <thead><tr><th>Five on the court</th>${valueHeads}</tr></thead>
+                <tbody>
+                    ${shownLineups
+                        .map((row) => {
+                            const incomplete =
+                                row.playerIds.length !== 5 ||
+                                row.playerIds.some((id) => !rosterById.has(String(id)));
+
+                            return `
+                                <tr class="${row.partialGames ? "seasonLineupPartialRow" : ""}">
+                                    <td class="lineupPlayersCell">
+                                        ${incomplete ? `<span class="lineupIncomplete">${row.playerIds.length !== 5 ? "Incomplete lineup" : "Includes a removed player"}</span>` : ""}
+                                        ${row.playerIds
+                                            .map((id) => `<span class="lineupPlayer">${playerLabel(id)}</span>`)
+                                            .join("")}
+                                    </td>
+                                    ${valueCells(row)}
+                                </tr>
+                            `;
+                        })
+                        .join("")}
+                </tbody>
+            </table>
+        </div>
+
+        ${
+            lineups.length > SEASON_LINEUP_LIMIT
+                ? `
+                    <button type="button" class="seasonLineupMoreButton" data-season-lineup-more>
+                        ${seasonLineupShowAll ? `Show top ${SEASON_LINEUP_LIMIT} lineups` : `Show all ${lineups.length} lineups`}
+                    </button>
+                `
+                : ""
+        }
+    `;
+
+    const playerTable = `
+        <div class="boxScoreWrap">
+            <table class="boxScoreTable lineupTable seasonLineupTable">
+                <thead><tr><th>Player (while on the court)</th>${valueHeads}</tr></thead>
+                <tbody>
+                    ${players
+                        .map((row) => `
+                            <tr class="${row.partialGames ? "seasonLineupPartialRow" : ""}">
+                                <td class="lineupPlayerNameCell">${playerLabel(row.playerId)}</td>
+                                ${valueCells(row)}
+                            </tr>
+                        `)
+                        .join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    let body;
+
+    if (games.whole.length + games.partial.length === 0) {
+        body = `<p class="lineupEmpty">No games this season tracked both teams' scoring. Turn on Opponent Scoring (with Points) in the team's stats to build lineup plus/minus.</p>`;
+    } else if (counted === 0) {
+        body = `<p class="lineupEmpty">No whole games yet. Tap Include partial games to see the ${plural(games.partial.length, "partial game")}.</p>`;
+    } else if (lineups.length === 0) {
+        body = `<p class="lineupEmpty">No baskets were recorded while both teams' scoring was tracked.</p>`;
+    } else {
+        body = seasonLineupView === "players" ? playerTable : lineupTable;
+    }
+
+    return `
+        <div class="reportSeasonLineups" id="seasonLineupSection" data-view="${seasonLineupView}" data-games="${seasonLineupIncludePartial ? "all" : "whole"}">
+            <div class="seasonPlayerHeader">
+                <h4>Season Lineup Plus/Minus</h4>
+            </div>
+
+            <div class="seasonLineupSwitches">
+                <div class="seasonViewSwitch" role="group" aria-label="Show lineups or players">
+                    <button type="button" data-season-lineup-view="lineups">Lineups</button>
+                    <button type="button" data-season-lineup-view="players">Players</button>
+                </div>
+
+                <div class="seasonViewSwitch" role="group" aria-label="Whole games only or include partial games">
+                    <button type="button" data-season-lineup-games="whole">Whole games</button>
+                    <button type="button" data-season-lineup-games="all">Include partial games</button>
+                </div>
+            </div>
+
+            <div class="lineupNotes">${notes.join("")}</div>
+
+            <p class="seasonNote seasonLineupGpNote">
+                <strong>GP here is not games played.</strong> It counts the games in which
+                ${seasonLineupView === "players" ? "the player was on the court" : "that exact five was on the court together"}
+                for at least one basket by either team.
+            </p>
+
+            ${body}
+
+            <p class="lineupKey">
+                PF = points your team scored, PA = points allowed, +/− = PF minus PA, while
+                ${seasonLineupView === "players" ? "the player was" : "those five were"} on the court.
+                Only baskets recorded while both teams' scoring was tracked count.
+                Sorted by +/−, then PF, then GP, then name.
+            </p>
+        </div>
+    `;
+}
+
+// Rebuilds only the Season Lineup Plus/Minus section after a switch.
+function refreshSeasonLineupSection() {
+    const section = document.getElementById("seasonLineupSection");
+
+    if (!section || !seasonLineupContext) {
+        return;
+    }
+
+    section.outerHTML = renderSeasonLineupSection(
+        seasonLineupContext.teamGames,
+        seasonLineupContext.team,
+        seasonLineupContext.season
+    );
+}
+
 function getPlayerMissTotal(playerId, shotType) {
     const shot = shotTypes[shotType];
 
@@ -7130,6 +7539,14 @@ if (!teamId || !selectedSeason) {
         getSeasonTeamStatAverage(teamGames, statKey)
     );
 
+    // A different team or season starts with the top lineups.
+    if (
+        seasonLineupContext?.team.id !== team.id ||
+        seasonLineupContext?.season !== selectedSeason
+    ) {
+        seasonLineupShowAll = false;
+    }
+
     // Roster order for the Player Game-by-Game selector.
     const playerSeasonStats = team.roster.map((player) => ({
         id: player.id,
@@ -7233,6 +7650,8 @@ if (!teamId || !selectedSeason) {
         </div>
 
         ${renderSeasonShootingSection(teamGames, team)}
+
+        ${renderSeasonLineupSection(teamGames, team, selectedSeason)}
 
         <div class="reportPlayerGameDetail">
     <div class="reportPlayerGameHeader">
@@ -7683,6 +8102,28 @@ document
         if (section) {
             section.dataset.view = seasonStatsView;
         }
+    });
+
+// Season Lineup Plus/Minus switches and Show all.
+document
+    .getElementById("reportsContent")
+    .addEventListener("click", (event) => {
+        const viewButton = event.target.closest("[data-season-lineup-view]");
+        const gamesButton = event.target.closest("[data-season-lineup-games]");
+        const moreButton = event.target.closest("[data-season-lineup-more]");
+
+        if (viewButton) {
+            seasonLineupView = viewButton.dataset.seasonLineupView;
+        } else if (gamesButton) {
+            seasonLineupIncludePartial =
+                gamesButton.dataset.seasonLineupGames === "all";
+        } else if (moreButton) {
+            seasonLineupShowAll = !seasonLineupShowAll;
+        } else {
+            return;
+        }
+
+        refreshSeasonLineupSection();
     });
 
 document
