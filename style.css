@@ -3628,6 +3628,11 @@ p.betaNoticeText {
     font-size: 13px;
 }
 
+/* End-of-game summary: a score correction that needs reviewing. */
+.summaryScoreNote {
+    margin-top: 14px;
+}
+
 /* Season Lineup Plus/Minus (Reports) */
 .reportSeasonLineups {
     margin-top: 28px;

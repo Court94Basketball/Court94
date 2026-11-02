@@ -5455,15 +5455,7 @@ document.getElementById(
         ? getTrackedOpponentPoints(liveGameState)
         : "";
 
-// Scores typed on this summary before a reload come back as typed.
-const summaryDraft = liveGameState.summaryDraft;
-
-if (summaryDraft) {
-    document.getElementById("summaryTeamScore").value =
-        summaryDraft.teamScore;
-    document.getElementById("summaryOpponentScore").value =
-        summaryDraft.opponentScore;
-}
+applySummaryScoreCorrections(team);
 
 // The saved game's ID is fixed now, so a save that was interrupted and
 // tried again can never add the same game twice. summaryOpen lets a reload
@@ -5480,16 +5472,154 @@ renderEndOfGameLineups();
     showScreen("gameSummary");
 }
 
-// Back to Game from the end-of-game summary: the summary is closed and the
-// scores are worked out again next time Finish Game is tapped.
+// Back to Game from the end-of-game summary. Score corrections are kept
+// (see applySummaryScoreCorrections).
 function closeGameSummary() {
     if (liveGameState) {
         liveGameState.summaryOpen = false;
-        delete liveGameState.summaryDraft;
         saveLiveGameState();
     }
 
     showScreen("liveGame");
+}
+
+// ---------- Final score corrections on the end-of-game summary ----------
+//
+// A score typed on the summary is kept in liveGameState.summaryDraft with
+// that team's tracked total at the time:
+//     { team: { value, tracked, defaultValue },
+//       opponent: { ... },
+//       review: { team: value, opponent: value } }
+// Each team is handled on its own. While its tracked total is unchanged,
+// the typed score comes back (after a reload or Back to Game). Once scoring
+// for that team is added or undone in the tracker, its score is worked out
+// again from the tracker and a note asks the coach to review the earlier
+// correction, so a correction is never added on top of new baskets.
+
+// The summary's starting scores, before any correction.
+let summaryDefaultScores = { team: "", opponent: "" };
+
+function getSummaryScoreSides(team) {
+    return [
+        {
+            key: "team",
+            inputId: "summaryTeamScore",
+            label: `${team.teamName}'s`,
+            tracked: getRecordedTeamPoints(liveGameState)
+        },
+        {
+            key: "opponent",
+            inputId: "summaryOpponentScore",
+            label: "the opponent's",
+            tracked: getTrackedOpponentPoints(liveGameState)
+        }
+    ];
+}
+
+function applySummaryScoreCorrections(team) {
+    const sides = getSummaryScoreSides(team);
+
+    sides.forEach((side) => {
+        summaryDefaultScores[side.key] =
+            String(document.getElementById(side.inputId).value);
+    });
+
+    // Scores typed in an earlier preview kept no tracked totals. Such a draft
+    // only exists while its summary is still open, so nothing has been
+    // tracked since: keep them with today's totals.
+    if (liveGameState.summaryDraft && "opponentScore" in liveGameState.summaryDraft) {
+        const typed = liveGameState.summaryDraft;
+
+        liveGameState.summaryDraft = {};
+
+        sides.forEach((side) => {
+            liveGameState.summaryDraft[side.key] = {
+                value: String(typed[`${side.key}Score`] ?? ""),
+                tracked: side.tracked,
+                defaultValue: summaryDefaultScores[side.key]
+            };
+        });
+    }
+
+    const draft = liveGameState.summaryDraft;
+
+    if (draft) {
+        sides.forEach((side) => {
+            const correction = draft[side.key];
+
+            if (!correction) {
+                return;
+            }
+
+            if (correction.tracked === side.tracked) {
+                document.getElementById(side.inputId).value = correction.value;
+                return;
+            }
+
+            if (correction.value !== correction.defaultValue) {
+                draft.review = { ...draft.review, [side.key]: correction.value };
+            }
+
+            delete draft[side.key];
+        });
+    }
+
+    renderSummaryScoreNote(team);
+}
+
+function renderSummaryScoreNote(team) {
+    const note = document.getElementById("summaryScoreNote");
+    const review = liveGameState?.summaryDraft?.review || {};
+
+    const lines = getSummaryScoreSides(team)
+        .filter((side) => review[side.key] !== undefined)
+        .map((side) => {
+            const now = document.getElementById(side.inputId).value;
+
+            return (
+                `You had changed ${side.label} score to ${review[side.key]}. ` +
+                `Scoring was added or undone in the tracker since then, so it has been ` +
+                (now === ""
+                    ? "cleared. Please enter the final score."
+                    : `recalculated from the tracker (${now}). Please review it before saving.`)
+            );
+        });
+
+    note.hidden = lines.length === 0;
+    note.innerHTML = lines.join("<br>");
+}
+
+// A score typed on the summary: kept with that team's tracked total now.
+function noteSummaryScoreTyped(sideKey) {
+    const team = getSelectedTeam();
+
+    if (!team || !liveGameState) {
+        return;
+    }
+
+    const side = getSummaryScoreSides(team).find(
+        (item) => item.key === sideKey
+    );
+
+    if (!liveGameState.summaryDraft) {
+        liveGameState.summaryDraft = {};
+    }
+
+    const draft = liveGameState.summaryDraft;
+
+    draft[sideKey] = {
+        value: document.getElementById(side.inputId).value,
+        tracked: side.tracked,
+        defaultValue: summaryDefaultScores[sideKey]
+    };
+
+    // Typing in that box counts as reviewing it.
+    if (draft.review) {
+        delete draft.review[sideKey];
+    }
+
+    renderSummaryScoreNote(team);
+    saveLiveGameState();
 }
 
 // A blank final score is never quietly saved as 0. It uses the tracked
@@ -5529,6 +5659,7 @@ function openSavedGameSummary(gameId) {
         return;
     }
     viewingSavedGame = true;
+    document.getElementById("summaryScoreNote").hidden = true;
 
     document.getElementById("summaryMatchup").textContent =
         `${team.teamName} vs ${game.opponent}`;
@@ -8399,20 +8530,17 @@ document
     });
 
 // Scores typed on the end-of-game summary are kept with the game in
-// progress, so a reload brings them back.
-["summaryTeamScore", "summaryOpponentScore"].forEach((inputId) => {
+// progress, so a reload or Back to Game brings them back.
+[
+    ["summaryTeamScore", "team"],
+    ["summaryOpponentScore", "opponent"]
+].forEach(([inputId, sideKey]) => {
     document.getElementById(inputId).addEventListener("input", () => {
         if (viewingSavedGame || !liveGameState?.summaryOpen) {
             return;
         }
 
-        liveGameState.summaryDraft = {
-            teamScore: document.getElementById("summaryTeamScore").value,
-            opponentScore:
-                document.getElementById("summaryOpponentScore").value
-        };
-
-        saveLiveGameState();
+        noteSummaryScoreTyped(sideKey);
     });
 });
 
@@ -8721,6 +8849,27 @@ if (savedScreen === "gameSummary") {
         openGameSummary();
     } else {
         savedScreen = "home";
+    }
+}
+
+// Screens that depend on a team or form chosen before the app closed can't
+// be rebuilt, and would open empty. Open the Teams list instead, except
+// Edit Game Setup during a game, which goes back to that game.
+if (
+    ["teamDetails", "teamSetup", "newGame", "gameConfirmation"].includes(
+        savedScreen
+    )
+) {
+    if (
+        savedScreen === "gameConfirmation" &&
+        liveGameState &&
+        !liveGameState.summaryOpen &&
+        getSelectedTeam()
+    ) {
+        renderLiveGame();
+        savedScreen = "liveGame";
+    } else {
+        savedScreen = "teams";
     }
 }
 
