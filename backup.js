@@ -1119,6 +1119,11 @@ function confirmAndApplyRestore() {
         });
 
         renderRestoreResult(result);
+
+        // Show the new restore safety copy and updated storage (storage.js).
+        if (typeof refreshStorageSettings === "function") {
+            refreshStorageSettings();
+        }
     } catch (error) {
         showRestoreMessage(
             error instanceof BackupFileError

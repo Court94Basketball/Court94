@@ -3785,3 +3785,131 @@ p.betaNoticeText {
         min-height: 44px;
     }
 }
+
+/* STORAGE SAFETY
+   Header warning while the game recovery copy can't be saved, low-storage
+   notes, and the Settings storage information (script.js, storage.js). */
+.recoveryWarning {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-height: 46px;
+    padding: 4px 14px;
+    border: 2px solid var(--danger);
+    border-radius: 10px;
+    background: #fee4e2;
+    color: var(--danger);
+    text-align: left;
+    touch-action: manipulation;
+}
+
+.recoveryWarning[hidden] {
+    display: none;
+}
+
+.recoveryWarningTitle {
+    font-size: 14px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.recoveryWarningHint {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.storageWarningNote {
+    margin-bottom: 18px;
+}
+
+.storageWarningNote[hidden],
+.safetyCopyBlock[hidden] {
+    display: none;
+}
+
+.safetyCopyBlock {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+}
+
+.safetyCopyBlock h4 {
+    margin: 0;
+    color: var(--navy);
+    font-size: 16px;
+}
+
+.safetyCopyBlock .formNote {
+    margin-top: 8px;
+}
+
+.storageCard {
+    margin-top: 18px;
+}
+
+.storageCard h3 {
+    margin-top: 0;
+}
+
+.storageInfo {
+    display: grid;
+    grid-template-columns: minmax(150px, 230px) 1fr;
+    gap: 10px 16px;
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.storageInfo dt {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.storageInfo dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+    .storageInfo {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .storageInfo dd {
+        margin-bottom: 10px;
+    }
+}
+
+/* In the landscape tracker the warning sits beside Back and Home, and the
+   game title moves over only while it shows. */
+@media (orientation: landscape) and (min-width: 1024px) {
+    body.liveTrackerActive .recoveryWarning {
+        width: 216px;
+        min-height: 44px;
+        padding: 2px 10px;
+    }
+
+    body.liveTrackerActive .recoveryWarningTitle {
+        font-size: 13px;
+    }
+
+    body.liveTrackerActive .recoveryWarningHint {
+        font-size: 11px;
+    }
+
+    body.liveTrackerActive.recoveryWarningVisible .liveGameHeader {
+        padding-left: 402px;
+    }
+
+    body.liveTrackerActive.recoveryWarningVisible .liveGameHeader h2 {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    body.liveTrackerActive.recoveryWarningVisible .editGameSetupButton {
+        white-space: nowrap;
+    }
+}

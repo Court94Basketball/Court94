@@ -1,5 +1,17 @@
 const STORAGE_KEY = "court94Teams";
 const GAMES_STORAGE_KEY = "court94Games";
+
+// The storage space check (storage.js) briefly writes a filler value here and
+// removes it straight away. If the app was closed during a check, remove the
+// leftover before anything else is saved.
+const STORAGE_CHECK_KEY = "court94StorageCheck";
+
+try {
+    localStorage.removeItem(STORAGE_CHECK_KEY);
+} catch (error) {
+    console.error("Court94 could not clear the storage check:", error);
+}
+
 const teamStats = [
     {
         key: "offensiveRebounds",
@@ -248,17 +260,116 @@ function loadTeams() {
     }
 }
 
+// Writes to this device's storage, then reads it back. Returns true only when
+// the browser kept exactly what was written: a full storage throws, and a
+// write that didn't stick shows up on reading it back.
+function writeStorageVerified(storageKey, text) {
+    try {
+        localStorage.setItem(storageKey, text);
+
+        return localStorage.getItem(storageKey) === text;
+    } catch (error) {
+        console.error(`Court94 could not save ${storageKey}:`, error);
+        return false;
+    }
+}
+
+// Saves the team list and confirms it was saved. If saving fails, the
+// previous saved copy is put back where possible and false is returned, so
+// the caller can put the in-memory list back too and tell the coach.
 function saveTeams() {
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(teams)
-    );
+    let previousText = null;
+
+    try {
+        previousText = localStorage.getItem(STORAGE_KEY);
+    } catch (error) {
+        console.error("Court94 could not read the saved teams:", error);
+    }
+
+    if (writeStorageVerified(STORAGE_KEY, JSON.stringify(teams))) {
+        return true;
+    }
+
+    try {
+        if (localStorage.getItem(STORAGE_KEY) !== previousText) {
+            if (previousText === null) {
+                localStorage.removeItem(STORAGE_KEY);
+            } else {
+                localStorage.setItem(STORAGE_KEY, previousText);
+            }
+        }
+    } catch (error) {
+        console.error("Court94 could not put back the saved teams:", error);
+    }
+
+    return false;
+}
+
+const TEAM_SAVE_FAILED_MESSAGE =
+    "This iPad's storage may be full. Go to Settings to check storage " +
+    "and download a backup.";
+
+// Game recovery copy: written after every stat so the game survives the app
+// closing. A failed write never interrupts tracking; the header warning shows
+// until a later write is confirmed, and the write is retried in the
+// background (every new stat also retries it).
+const RECOVERY_RETRY_DELAYS = [2000, 5000, 15000, 30000];
+
+let recoveryRetryTimer = null;
+let recoveryRetryCount = 0;
+let recoveryWarningShown = false;
+
+function setRecoveryWarning(show) {
+    if (show === recoveryWarningShown) {
+        return;
+    }
+
+    recoveryWarningShown = show;
+
+    const warning = document.getElementById("recoveryWarning");
+
+    if (warning) {
+        warning.hidden = !show;
+    }
+
+    document.body.classList.toggle("recoveryWarningVisible", show);
+}
+
+function clearRecoveryRetry() {
+    clearTimeout(recoveryRetryTimer);
+    recoveryRetryTimer = null;
+    recoveryRetryCount = 0;
+}
+
+function scheduleRecoveryRetry() {
+    if (recoveryRetryTimer) {
+        return;
+    }
+
+    const delay =
+        RECOVERY_RETRY_DELAYS[
+            Math.min(recoveryRetryCount, RECOVERY_RETRY_DELAYS.length - 1)
+        ];
+
+    recoveryRetryCount += 1;
+    recoveryRetryTimer = setTimeout(() => {
+        recoveryRetryTimer = null;
+        saveLiveGameState();
+    }, delay);
 }
 
 function saveLiveGameState() {
     if (!liveGameState) {
-        localStorage.removeItem("court94LiveGameRecovery");
-        return;
+        clearRecoveryRetry();
+
+        try {
+            localStorage.removeItem("court94LiveGameRecovery");
+        } catch (error) {
+            console.error("Court94 could not clear the game recovery:", error);
+        }
+
+        setRecoveryWarning(false);
+        return true;
     }
 
     const recoveryData = {
@@ -269,9 +380,32 @@ function saveLiveGameState() {
         currentGameSetup
     };
 
-    localStorage.setItem(
+    const saved = writeStorageVerified(
         "court94LiveGameRecovery",
         JSON.stringify(recoveryData)
+    );
+
+    setRecoveryWarning(!saved);
+
+    if (saved) {
+        clearRecoveryRetry();
+    } else {
+        scheduleRecoveryRetry();
+    }
+
+    return saved;
+}
+
+function explainRecoveryWarning() {
+    alert(
+        "Game recovery not saved\n\n" +
+        "Court94 couldn't save a recovery copy of this game on this iPad, " +
+        "probably because its storage is full. Your stats are still being " +
+        "tracked, and Court94 keeps trying to save the recovery copy.\n\n" +
+        "While this warning shows, don't close Court94 or switch it off: if " +
+        "it closes, recent stats could be lost.\n\n" +
+        "When the game is over, tap Finish Game and Save Game as usual. " +
+        "Afterwards, go to Settings to check storage and download a backup."
     );
 }
 
@@ -282,7 +416,14 @@ window.addEventListener("pagehide", () => {
 function showScreen(screenName) {
     console.log("SHOW SCREEN:", screenName);
 
-    localStorage.setItem("court94CurrentScreen", screenName);
+    // Only used to reopen on the same screen; a full storage must never stop
+    // the screen from changing.
+    try {
+        localStorage.setItem("court94CurrentScreen", screenName);
+    } catch (error) {
+        console.error("Court94 could not remember the current screen:", error);
+    }
+
     Object.values(screens).forEach((screen) => {
         screen.classList.remove("activeScreen");
     });
@@ -682,6 +823,8 @@ function saveTeamFromForm(event) {
         selectedPlayerStats
     };
 
+    const previousTeams = teams;
+
     if (editingTeamId) {
         teams = teams.map((team) => {
             return team.id === editingTeamId
@@ -689,10 +832,23 @@ function saveTeamFromForm(event) {
                 : team;
         });
     } else {
-        teams.push(teamData);
+        teams = [...teams, teamData];
     }
 
-    saveTeams();
+    // Only a confirmed save leaves this screen. Otherwise nothing changes
+    // and the coach's entries stay on the form.
+    if (!saveTeams()) {
+        teams = previousTeams;
+
+        alert(
+            "Court94 couldn't save this team, so nothing was changed. " +
+            "Your entries are still on this screen.\n\n" +
+            TEAM_SAVE_FAILED_MESSAGE
+        );
+
+        return;
+    }
+
     renderTeams();
     showScreen("teams");
 }function getSelectedTeam() {
@@ -6160,6 +6316,12 @@ function finishSavedGame(team) {
 
     saveLiveGameState();
     openTeamDetails(team.id);
+
+    // Saved games are what fill storage, so check the space left now
+    // (storage.js), never during a game.
+    if (typeof checkStorageAfterGameSaved === "function") {
+        checkStorageAfterGameSaved();
+    }
 }
 function renderLastAction() {
     const lastActionText =
@@ -7224,11 +7386,23 @@ function deleteTeam(teamId) {
         return;
     }
 
+    const previousTeams = teams;
+
     teams = teams.filter(
         (savedTeam) => savedTeam.id !== teamId
     );
 
-    saveTeams();
+    if (!saveTeams()) {
+        teams = previousTeams;
+
+        alert(
+            `Court94 couldn't delete ${team.teamName}, so it is still here and nothing was changed.\n\n` +
+            TEAM_SAVE_FAILED_MESSAGE
+        );
+
+        return;
+    }
+
     renderTeams();
 }
 
@@ -8359,6 +8533,10 @@ document
     .addEventListener("click", () => {
         showScreen("settings");
     });
+
+document
+    .getElementById("recoveryWarning")
+    .addEventListener("click", explainRecoveryWarning);
 
 document
     .getElementById("addTeamButton")

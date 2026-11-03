@@ -55,6 +55,17 @@
     🏠
 </button>
 
+    <!-- Shown only while the game recovery copy can't be saved (script.js). -->
+    <button
+        id="recoveryWarning"
+        class="recoveryWarning"
+        type="button"
+        hidden
+    >
+        <span class="recoveryWarningTitle">⚠ Game recovery not saved</span>
+        <span class="recoveryWarningHint">Don't close Court94 · Tap for help</span>
+    </button>
+
 </div>
 
     <main class="appContainer">
@@ -591,6 +602,12 @@
                     🏀 Start New Game
                 </button>
             </div>
+
+            <p
+                id="teamStorageWarning"
+                class="lineupNote lineupNoteWarn storageWarningNote"
+                hidden
+            ></p>
 
             <section class="formCard">
 
@@ -1144,6 +1161,37 @@
                     class="backupStatus"
                     role="status"
                 ></p>
+
+                <!-- Shown only when a restore left a safety copy on this device (storage.js). -->
+                <div id="safetyCopyBlock" class="safetyCopyBlock" hidden>
+                    <h4>Restore Safety Copy</h4>
+
+                    <p id="safetyCopyText" class="formNote"></p>
+
+                    <div class="backupActions">
+                        <button
+                            id="downloadSafetyCopyButton"
+                            class="secondaryButton"
+                            type="button"
+                        >
+                            Download Safety Copy
+                        </button>
+
+                        <button
+                            id="removeSafetyCopyButton"
+                            class="cancelButton deleteButton"
+                            type="button"
+                        >
+                            Remove Safety Copy
+                        </button>
+                    </div>
+
+                    <p
+                        id="safetyCopyStatus"
+                        class="backupStatus"
+                        role="status"
+                    ></p>
+                </div>
             </section>
 
             <section
@@ -1151,12 +1199,36 @@
                 class="formCard restorePanel"
                 hidden
             ></section>
+
+            <!-- Read-only information about this device's storage (storage.js). -->
+            <section class="formCard storageCard">
+                <h3>Storage on This Device</h3>
+
+                <p
+                    id="storageWarning"
+                    class="lineupNote lineupNoteWarn storageWarningNote"
+                    hidden
+                ></p>
+
+                <dl id="storageInfo" class="storageInfo"></dl>
+
+                <div class="backupActions">
+                    <button
+                        id="checkStorageButton"
+                        class="cancelButton"
+                        type="button"
+                    >
+                        Check Again
+                    </button>
+                </div>
+            </section>
         </section>
 
     </main>
 
     <script src="script.js"></script>
     <script src="backup.js"></script>
+    <script src="storage.js"></script>
 
 </body>
 </html>
