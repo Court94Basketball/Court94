@@ -16,7 +16,7 @@ const STORAGE_CRITICAL_PERCENT = 85;
 // plenty. It measures to within STORAGE_CHECK_STEP_CHARS.
 const STORAGE_CHECK_MAX_CHARS = 8 * 1024 * 1024;
 const STORAGE_CHECK_FIRST_CHARS = 256 * 1024;
-const STORAGE_CHECK_STEP_CHARS = 64 * 1024;
+const STORAGE_CHECK_STEP_CHARS = 16 * 1024;
 
 // Total space found by the last space check (used + free), or that there
 // was plenty, so storage can be estimated without checking again: during a

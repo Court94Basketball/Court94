@@ -3872,6 +3872,32 @@ p.betaNoticeText {
     overflow-wrap: anywhere;
 }
 
+/* Phones: the warning shares the row with Back and Home, so it takes the
+   remaining width and its text wraps instead of pushing the page wider. */
+@media (max-width: 520px) {
+    .recoveryWarning {
+        flex: 1 1 0;
+        min-width: 0;
+        gap: 1px;
+        margin-right: 16px;
+        padding: 2px 8px;
+    }
+
+    .recoveryWarningTitle,
+    .recoveryWarningHint {
+        white-space: normal;
+        line-height: 1.15;
+    }
+
+    .recoveryWarningTitle {
+        font-size: 12px;
+    }
+
+    .recoveryWarningHint {
+        font-size: 10px;
+    }
+}
+
 @media (max-width: 520px) {
     .storageInfo {
         grid-template-columns: 1fr;
