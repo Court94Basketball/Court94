@@ -15,6 +15,7 @@ const OFFLINE_META_CACHE = "court94-meta";
 
 let offlineRegistration = null;
 let offlineSetupFailed = false;
+let offlineSetupProblem = "";
 let offlineUserActed = false;
 
 function offlineUrl(path) {
@@ -188,6 +189,7 @@ function startOfflineSupport() {
             }
 
             offlineSetupFailed = true;
+            offlineSetupProblem = error?.message || String(error);
             console.error("Court94 couldn't set up offline use:", error);
             refreshOfflineSettings();
         });
@@ -208,7 +210,8 @@ async function describeOfflineUse() {
         return {
             ready: "Not ready. Court94 couldn't set up offline use on this device.",
             version: "",
-            update: ""
+            update: "",
+            problem: offlineSetupProblem
         };
     }
 
@@ -238,13 +241,23 @@ async function describeOfflineUse() {
     }
 
     const saving = Boolean(registration?.installing);
+    let problem = "";
+
+    try {
+        problem = JSON.parse(
+            (await readOfflineMeta("__court94/last-attempt")) || "{}"
+        ).problem || "";
+    } catch (error) {
+        problem = "";
+    }
 
     return {
         ready: saving
             ? "Not yet. Saving a copy now; keep Court94 open with internet for a minute."
             : "Not yet. Open Court94 once with an internet connection.",
         version: currentCheck.version || "",
-        update
+        update,
+        problem: saving ? "" : problem
     };
 }
 
@@ -277,6 +290,14 @@ function refreshOfflineSettings() {
 
             if (info.update) {
                 addStorageRow(list, "Update", info.update);
+            }
+
+            if (info.problem) {
+                addStorageRow(
+                    list,
+                    "Last attempt",
+                    `The offline copy couldn't be saved: ${info.problem}`
+                );
             }
         })
         .catch((error) => {

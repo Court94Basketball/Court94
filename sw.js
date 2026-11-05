@@ -20,14 +20,14 @@
 // fingerprint left out of date stops the update from installing, never mixes
 // versions. APP_VERSION is the first 10 characters of the SHA-256 of the
 // "<file> <fingerprint>" lines.
-const APP_VERSION = "9efc2e9896";
+const APP_VERSION = "a408936e4a";
 const APP_FILES = {
     "index.html": "ccd87165e14aed0205ad4715e9b5bed027af2ce1a86ae5bdea7184ef38ecfe98",
     "style.css": "a1b19a352a65d1337d934abee15f178cbb5fb96615d6ebb1525c978c86cd28ab",
     "script.js": "b2f782bd336ac2424c62beb2175fb3c6d4c62b8e925be3d7ad756e3afac49540",
     "backup.js": "91946e1c2c22dfb8fbaafd05f9157bab9aff7581919235071ad65c3330906e2a",
     "storage.js": "cc060a87718a83db2828d0ddcfb7cf24bde2a9ecea9e50248a0a77210f474de3",
-    "offline.js": "21828304d2c8eaada75ead275dd1d081de72841b2754dc9bc7d8f176ef5cbb1d",
+    "offline.js": "9aae3a7cd4901b3217fa25652e4d4d24126849cf021ddacd0124efba8a93e775",
     "images/Court94 Banner Logo.png": "f751396ce17a0b7138c9d153ad5d1a4ed368f03fc5aec3c9e3920f143f57681d",
     "images/Court94-logo.png": "d6337ca2da22f2d1ba490e7f659f86dce175454bc8700c3ee16a760dd2cfbfc4"
 };
@@ -39,6 +39,7 @@ const META_CACHE = "court94-meta";
 const MANIFEST_PATH = "__court94/manifest";
 const CURRENT_PATH = "__court94/current";
 const LATEST_PATH = "__court94/latest";
+const ATTEMPT_PATH = "__court94/last-attempt";
 
 // Which copy each open page was given, so its files all come from that copy.
 const copyForPage = new Map();
@@ -123,16 +124,25 @@ async function saveAppCopy() {
         for (const [path, fingerprint] of Object.entries(APP_FILES)) {
             // "reload" skips any copy the browser kept, so a release is never
             // mixed with files from before it.
-            const response = await fetch(appUrl(path), { cache: "reload" });
+            let response;
+
+            try {
+                response = await fetch(appUrl(path), { cache: "reload" });
+            } catch (error) {
+                throw new Error(`${path} couldn't be downloaded (${error.message})`);
+            }
 
             if (!response.ok) {
-                throw new Error(`Court94: ${path} returned ${response.status}`);
+                throw new Error(`${path}: the website answered ${response.status} instead of the file`);
             }
 
             const body = await response.arrayBuffer();
 
             if ((await sha256(body)) !== fingerprint) {
-                throw new Error(`Court94: ${path} doesn't match this version`);
+                throw new Error(
+                    `${path} doesn't match this version (got ${body.byteLength} bytes, ` +
+                    `${response.headers.get("Content-Type") || "no type"})`
+                );
             }
 
             await cache.put(
@@ -178,6 +188,19 @@ async function recordAppCopy() {
     if (!(await isCompleteCopy(current))) {
         await writeMeta(CURRENT_PATH, APP_CACHE);
     }
+}
+
+// What happened the last time this version tried to save its copy (shown in
+// Settings when Court94 isn't ready to open without internet).
+async function recordAttempt(problem) {
+    await writeMeta(
+        ATTEMPT_PATH,
+        JSON.stringify({
+            version: APP_VERSION,
+            at: new Date().toISOString(),
+            problem
+        })
+    );
 }
 
 // The copy to open: the current one, or if that is gone, the newest one.
@@ -251,6 +274,8 @@ async function openApp(event) {
     event.waitUntil(
         saveAppCopy()
             .then(recordAppCopy)
+            .then(() => recordAttempt(""))
+            .catch((error) => recordAttempt(error.message))
             .catch(() => {})
     );
 
@@ -284,7 +309,12 @@ self.addEventListener("install", (event) => {
     event.waitUntil(
         saveAppCopy()
             .then(recordAppCopy)
+            .then(() => recordAttempt(""))
             .then(() => self.skipWaiting())
+            .catch(async (error) => {
+                await recordAttempt(error.message).catch(() => {});
+                throw error;
+            })
     );
 });
 
