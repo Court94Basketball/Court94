@@ -413,6 +413,17 @@ button {
     gap: 11px;
 }
 
+/* "Opponent" heading inside the team statistics choices (spans the grid). */
+.statChoiceGroupHeading {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 .statChoice {
     display: flex;
     align-items: flex-start;

@@ -28,10 +28,12 @@ const teamStats = [
     name: "Team Turnovers",
     description: "Track your team's turnovers."
 },
-{   
+{
         key: "forcedTurnovers",
         name: "Forced Turnovers",
-        description: "Turnovers created by your defense."
+        description: "Turnovers created by your defense.",
+        // The opponent's turnovers (one statistic, not a separate count).
+        side: "opponent"
     },
     {
         key: "teamFouls",
@@ -66,7 +68,33 @@ const teamStats = [
     {
         key: "opponentOffensiveRebounds",
         name: "Opp. Off Rebs",
-        description: "Track second-chance opportunities allowed."
+        description: "Track second-chance opportunities allowed.",
+        side: "opponent"
+    },
+    // Opponent statistics: counts like any team stat, chosen one by one.
+    {
+        key: "opponentDefensiveRebounds",
+        name: "Opp. Def Rebs",
+        description: "Track the opponent's defensive rebounds.",
+        side: "opponent"
+    },
+    {
+        key: "opponentSteals",
+        name: "Opp. Steals",
+        description: "Track the opponent's steals.",
+        side: "opponent"
+    },
+    {
+        key: "opponentAssists",
+        name: "Opp. Assists",
+        description: "Track the opponent's assists.",
+        side: "opponent"
+    },
+    {
+        key: "opponentBlocks",
+        name: "Opp. Blocks",
+        description: "Track the opponent's blocks.",
+        side: "opponent"
     }
 ];
 
@@ -160,13 +188,44 @@ const teamStatSettings = [
     {
         key: "opponentScoring",
         name: "Opponent Scoring",
-        description: "Red +1/+2/+3 buttons for opponent baskets. Needed for lineup plus/minus."
+        description: "Red +1/+2/+3 buttons for opponent baskets. Needed for lineup plus/minus.",
+        side: "opponent"
     }
 ];
 
-// Every choice shown in the Team Statistics checkboxes.
+// Every choice shown in the Team Statistics checkboxes: our team's first,
+// then the opponent's (Opponent Scoring leading).
+const OPPONENT_CHOICE_ORDER = [
+    "opponentScoring",
+    "opponentOffensiveRebounds",
+    "opponentDefensiveRebounds",
+    "forcedTurnovers",
+    "opponentSteals",
+    "opponentAssists",
+    "opponentBlocks"
+];
+
 function getTeamStatChoices() {
-    return [...teamStats, ...teamStatSettings];
+    const choices = [...teamStats, ...teamStatSettings];
+    const opponentChoices = choices
+        .filter((stat) => stat.side === "opponent")
+        .sort(
+            (a, b) =>
+                OPPONENT_CHOICE_ORDER.indexOf(a.key) -
+                OPPONENT_CHOICE_ORDER.indexOf(b.key)
+        );
+
+    return [
+        ...choices.filter((stat) => stat.side !== "opponent"),
+        ...opponentChoices
+    ];
+}
+
+// The "Opponent" heading before the first opponent choice in a list.
+function getOpponentChoicesHeading(stat, index, list) {
+    return stat.side === "opponent" && list[index - 1]?.side !== "opponent"
+        ? `<p class="statChoiceGroupHeading">Opponent</p>`
+        : "";
 }
 
 function isTeamStatSetting(statKey) {
@@ -690,8 +749,8 @@ function renderStatChoices() {
         document.getElementById("playerStatChoices");
 
     teamStatChoices.innerHTML = getTeamStatChoices()
-        .map((stat) => {
-            return `
+        .map((stat, index, list) => {
+            return getOpponentChoicesHeading(stat, index, list) + `
                 <label class="statChoice">
                     <input
                         type="checkbox"
@@ -887,11 +946,11 @@ const selectedPlayerStats = [
     )
 ];
     gameTeamStatChoices.innerHTML = getTeamStatChoices()
-        .map((stat) => {
+        .map((stat, index, list) => {
             const isChecked =
                 selectedTeamStats.includes(stat.key);
 
-            return `
+            return getOpponentChoicesHeading(stat, index, list) + `
                 <label class="gameStatChoice">
                     <input
                         type="checkbox"
@@ -2302,7 +2361,7 @@ const hasFreeThrows =
 
             // Opponent stats are red, like the opponent scoring buttons.
             const colorClass =
-                statKey === "opponentOffensiveRebounds"
+                statKey.startsWith("opponent")
                     ? "teamStatOpponent"
                     : cardColors[index % cardColors.length];
 
@@ -3907,22 +3966,69 @@ function recordOpponentPoints(points) {
     saveLiveGameState();
 }
 
-// Opponent UNDO: the most recent opponent basket only.
+// The entries the red opponent UNDO takes back: opponent baskets, and taps on
+// the red opponent stat cards shown in this game (− and + alike).
+function isOpponentAction(action) {
+    if (action.type === "opponentPoints") {
+        return true;
+    }
+
+    const team = getSelectedTeam();
+
+    return (
+        action.type === "teamStat" &&
+        String(action.statKey).startsWith("opponent") &&
+        Boolean(team) &&
+        getGameStatKeys(liveGameState, team, "selectedTeamStats")
+            .includes(action.statKey)
+    );
+}
+
+// Opponent UNDO: takes back the most recent opponent entry exactly, from the
+// same history as everything else: a basket (its score-log event, so the
+// opponent score and plus/minus go back too) or an opponent stat tap.
 function undoOpponentPoints() {
     for (let i = liveActionHistory.length - 1; i >= 0; i -= 1) {
         const action = liveActionHistory[i];
 
-        if (action.type !== "opponentPoints") {
+        if (!isOpponentAction(action)) {
             continue;
         }
 
-        removeScoringLogEvent(action.scoringEventId);
+        if (action.type === "opponentPoints") {
+            removeScoringLogEvent(action.scoringEventId);
+        } else {
+            reverseTeamCount(action.statKey, action);
+        }
+
         liveActionHistory.splice(i, 1);
 
+        renderTeamStatButtons();
         renderOpponentScoring();
         renderLastAction();
         saveLiveGameState();
         return;
+    }
+}
+
+// Takes back a team count for the game and the action's period: exactly what
+// the action changed when that was recorded, otherwise its amount.
+function reverseTeamCount(statKey, action) {
+    const period = action.period || liveGameState.period;
+    const periodStats = liveGameState.teamStatsByPeriod?.[period];
+    const gameChange = action.gameChange ?? action.amount ?? 1;
+    const periodChange = action.periodChange ?? action.amount ?? 1;
+
+    liveGameState.teamStats[statKey] = Math.max(
+        0,
+        (liveGameState.teamStats[statKey] || 0) - gameChange
+    );
+
+    if (periodStats) {
+        periodStats[statKey] = Math.max(
+            0,
+            (periodStats[statKey] || 0) - periodChange
+        );
     }
 }
 
@@ -3950,9 +4056,7 @@ function renderOpponentScoring() {
         getTrackedOpponentPoints(liveGameState);
 
     document.getElementById("opponentUndoButton").disabled =
-        !liveActionHistory.some(
-            (action) => action.type === "opponentPoints"
-        );
+        !liveActionHistory.some(isOpponentAction);
 }
 
 // ---------- Lineup report ----------
@@ -5202,6 +5306,10 @@ function recordTeamStat(statKey, amount = 1) {
         return;
     }
 
+    // What the tap actually changed (a − at 0 changes nothing), so an Undo
+    // can take back exactly that.
+    const gameBefore = liveGameState.teamStats[statKey] || 0;
+
     liveGameState.teamStats[statKey] =
     Math.max(
         0,
@@ -5210,6 +5318,9 @@ function recordTeamStat(statKey, amount = 1) {
 
     const currentPeriod =
     liveGameState.period;
+
+    const periodBefore =
+        liveGameState.teamStatsByPeriod[currentPeriod]?.[statKey] || 0;
 
 if (
     !liveGameState.teamStatsByPeriod[
@@ -5237,13 +5348,18 @@ liveGameState.teamStatsByPeriod[
         type: "teamStat",
         statKey,
         amount,
+        gameChange: liveGameState.teamStats[statKey] - gameBefore,
+        periodChange:
+            liveGameState.teamStatsByPeriod[currentPeriod][statKey] -
+            periodBefore,
         period: liveGameState.period,
         description:
-            `Team — ${stat.name}`
+            `${statKey.startsWith("opponent") ? "Opponent" : "Team"} — ${stat.name}`
     });
 
     renderTeamStatButtons();
 renderLastAction();
+renderOpponentScoring();
 
 saveLiveGameState();
 }
@@ -8339,6 +8455,10 @@ if (!teamId || !selectedSeason) {
     offensiveRebounds: "ORebs",
     defensiveRebounds: "DRebs",
     opponentOffensiveRebounds: "Opp ORebs",
+    opponentDefensiveRebounds: "Opp DRebs",
+    opponentSteals: "Opp Stl",
+    opponentAssists: "Opp Ast",
+    opponentBlocks: "Opp Blk",
     transitionPoints: "Trans Pts",
     paintTouches: "Paint Tchs",
     turnovers: "TO's",
