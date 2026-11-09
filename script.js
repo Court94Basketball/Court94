@@ -2713,6 +2713,10 @@ if (
 
                 liveActionHistory.splice(i, 1);
                 renderTeamStatButtons();
+                renderLastAction();
+                // Saved straight away, like the other undos, so the undo
+                // survives the app closing.
+                saveLiveGameState();
                 return;
             }
         }
