@@ -31,8 +31,12 @@ const teamStats = [
 {
         key: "forcedTurnovers",
         name: "Forced Turnovers",
-        description: "Turnovers created by your defense.",
+        description: "All of the opponent's turnovers, forced and unforced. Reports keep the name Forced Turnovers.",
         // The opponent's turnovers (one statistic, not a separate count).
+        // Shown as Opp TO on the tracker and in Game Setup; reports and
+        // saved-game tables keep "Forced Turnovers".
+        choiceName: "Opp TO",
+        panelName: "Opp TO",
         side: "opponent"
     },
     {
@@ -219,6 +223,13 @@ function getTeamStatChoices() {
         ...choices.filter((stat) => stat.side !== "opponent"),
         ...opponentChoices
     ];
+}
+
+// Opponent stats (red side of the tracker, the opponent UNDO).
+function isOpponentStatKey(statKey) {
+    return teamStats.some(
+        (stat) => stat.key === statKey && stat.side === "opponent"
+    );
 }
 
 // The "Opponent" heading before the first opponent choice in a list.
@@ -758,7 +769,7 @@ function renderStatChoices() {
                     >
 
                     <span>
-                        <strong>${stat.name}</strong>
+                        <strong>${stat.choiceName || stat.name}</strong>
                         <small>${stat.description}</small>
                     </span>
                 </label>
@@ -957,7 +968,7 @@ const selectedPlayerStats = [
                         data-game-team-stat="${stat.key}"
                         ${isChecked ? "checked" : ""}
                     >
-                    <span>${stat.name}</span>
+                    <span>${stat.choiceName || stat.name}</span>
                 </label>
             `;
         })
@@ -1481,6 +1492,14 @@ function renderLiveGame() {
     ).textContent =
         `${team.teamName} vs ${liveGameState.opponent}`;
 
+    // Our name above our score (blue side).
+    const teamScoreName = document.getElementById("liveTeamName");
+
+    if (teamScoreName) {
+        teamScoreName.textContent = team.teamName;
+        teamScoreName.title = team.teamName;
+    }
+
     document.getElementById(
         "liveGameDetails"
     ).textContent =
@@ -1557,7 +1576,13 @@ const landscapeStatLabels = {
 const landscapeTeamStatLabels = {
     offensiveRebounds: "Off Rebounds",
     defensiveRebounds: "Def Rebounds",
-    forcedTurnovers: "Forced TO"
+    // The red opponent side already says whose stats these are.
+    forcedTurnovers: "Opp TO",
+    opponentOffensiveRebounds: "Off Reb",
+    opponentDefensiveRebounds: "Def Reb",
+    opponentSteals: "STL",
+    opponentAssists: "AST",
+    opponentBlocks: "BLK"
 };
 
 let landscapeFit = null;
@@ -1605,7 +1630,7 @@ function fitLandscapeTracker() {
     const setup = [
         statButtonCount,
         pointButtonCount,
-        document.querySelectorAll("#teamStatButtons button").length,
+        document.querySelectorAll("#scorePanels button").length,
         cards.length
     ].join("|");
 
@@ -2349,8 +2374,17 @@ const hasFreeThrows =
     "teamStatBlue"
 ];
 
-    const regularCards = regularStats
-        .map((statKey, index) => {
+    // Our counts go on the blue side; the opponent's (in a fixed order) on
+    // the red side, drawn the same way with their own − and +.
+    const opponentStats = regularStats
+        .filter(isOpponentStatKey)
+        .sort(
+            (a, b) =>
+                OPPONENT_CHOICE_ORDER.indexOf(a) -
+                OPPONENT_CHOICE_ORDER.indexOf(b)
+        );
+
+    const renderCountCard = (statKey, index) => {
             const stat = teamStats.find(
                 (item) => item.key === statKey
             );
@@ -2361,7 +2395,7 @@ const hasFreeThrows =
 
             // Opponent stats are red, like the opponent scoring buttons.
             const colorClass =
-                statKey.startsWith("opponent")
+                isOpponentStatKey(statKey)
                     ? "teamStatOpponent"
                     : cardColors[index % cardColors.length];
 
@@ -2375,7 +2409,7 @@ const hasFreeThrows =
                             ? ` data-short-label="${landscapeTeamStatLabels[statKey]}"`
                             : ""
                     }>
-                        ${stat.name}
+                        ${stat.panelName || stat.name}
                     </div>
 
                     <div class="teamStatCardTotal">
@@ -2403,8 +2437,14 @@ const hasFreeThrows =
                     </div>
                 </div>
             `;
-        })
+        };
+
+    const regularCards = regularStats
+        .filter((statKey) => !isOpponentStatKey(statKey))
+        .map(renderCountCard)
         .join("");
+
+    const opponentCards = opponentStats.map(renderCountCard).join("");
 
     const transitionCard = hasTransition
         ? `
@@ -2651,11 +2691,21 @@ ${freeThrowCard}
         ${transitionCard}
     `;
 
+    const opponentContainer =
+        document.getElementById("opponentStatButtons");
+
+    if (opponentContainer) {
+        opponentContainer.innerHTML = opponentCards;
+        opponentContainer.hidden = !opponentCards;
+    }
+
     // Lets the landscape team strip place the reminder above the tiles.
     container.classList.toggle(
         "hasTeamShotReminder",
         Boolean(teamShotReminder)
     );
+
+    renderOpponentScoring();
 
     fitLandscapeTracker();
 
@@ -3977,7 +4027,7 @@ function isOpponentAction(action) {
 
     return (
         action.type === "teamStat" &&
-        String(action.statKey).startsWith("opponent") &&
+        isOpponentStatKey(action.statKey) &&
         Boolean(team) &&
         getGameStatKeys(liveGameState, team, "selectedTeamStats")
             .includes(action.statKey)
@@ -4032,24 +4082,48 @@ function reverseTeamCount(statKey, action) {
     }
 }
 
-// The red opponent controls: shown only while Opponent Scoring is on.
+// The red opponent side: shown while Opponent Scoring or any opponent stat is
+// chosen. The score and +1/+2/+3 only with Opponent Scoring; UNDO whenever
+// the side is shown.
 function renderOpponentScoring() {
     const controls = document.getElementById("opponentScoring");
+    const panel = document.getElementById("opponentPanel");
 
     if (!controls) {
         return;
     }
 
+    const team = getSelectedTeam();
     const isOn = isOpponentScoringOn();
+    const hasOpponentStats =
+        Boolean(liveGameState && team) &&
+        getGameStatKeys(liveGameState, team, "selectedTeamStats")
+            .some(isOpponentStatKey);
+    const showPanel = isOn || hasOpponentStats;
 
-    controls.hidden = !isOn;
+    if (panel) {
+        panel.hidden = !showPanel;
+        document
+            .getElementById("scorePanels")
+            ?.classList.toggle("hasOpponentPanel", showPanel);
+    }
+
+    controls.hidden = !showPanel;
+    controls.classList.toggle("opponentScoringOff", !isOn);
 
     document
         .getElementById("liveGameScreen")
         .classList.toggle("opponentScoringOn", isOn);
 
-    if (!isOn) {
+    if (!showPanel) {
         return;
+    }
+
+    const name = document.getElementById("liveOpponentName");
+
+    if (name) {
+        name.textContent = liveGameState.opponent || "Opponent";
+        name.title = liveGameState.opponent || "";
     }
 
     document.getElementById("liveOpponentPointTotal").textContent =
@@ -5354,7 +5428,7 @@ liveGameState.teamStatsByPeriod[
             periodBefore,
         period: liveGameState.period,
         description:
-            `${statKey.startsWith("opponent") ? "Opponent" : "Team"} — ${stat.name}`
+            `${isOpponentStatKey(statKey) ? "Opponent" : "Team"} — ${stat.panelName || stat.name}`
     });
 
     renderTeamStatButtons();
@@ -7514,7 +7588,7 @@ function openTeamDetails(teamId) {
 
             return `
                 <div class="detailsStat">
-                    <strong>${stat.name}</strong>
+                    <strong>${stat.choiceName || stat.name}</strong>
                     <small>${stat.description}</small>
                 </div>
             `;

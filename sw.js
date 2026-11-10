@@ -20,11 +20,11 @@
 // fingerprint left out of date stops the update from installing, never mixes
 // versions. APP_VERSION is the first 10 characters of the SHA-256 of the
 // "<file> <fingerprint>" lines.
-const APP_VERSION = "0d06c41a6c";
+const APP_VERSION = "a14cc17e57";
 const APP_FILES = {
-    "index.html": "f6028962fcf901c6da5aaa46f495d8d9b24abb5d135c88c5520275f05073531a",
-    "style.css": "3cf56c3a3ba8e4c493500f5a8d29ae9df4c0df97f310f3d58b568160e85d1f38",
-    "script.js": "7eafcd225e7c84284a7c235586489cb6fa61a33a6f421d45e321a77ce9e1f099",
+    "index.html": "6170979201e737ccbd0f198d212bd662441700a4fd1c588d7eb58a926616fb52",
+    "style.css": "2123f118ad336eccb809e269e58b94bfdc93b40c9927f6a65acf20313f270ef0",
+    "script.js": "a67f55da261b89a6e17053fa78f0703520139c89dfd86dcba0a91796caec869c",
     "backup.js": "e94ac339ff2e2354929f0fd8e23ed096b6c8257794469e604cab9b0e6fbcdda4",
     "storage.js": "cc060a87718a83db2828d0ddcfb7cf24bde2a9ecea9e50248a0a77210f474de3",
     "offline.js": "9aae3a7cd4901b3217fa25652e4d4d24126849cf021ddacd0124efba8a93e775",
